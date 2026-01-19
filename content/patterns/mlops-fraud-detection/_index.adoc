@@ -6,6 +6,8 @@ summary: This pattern demonstrates how Red Hat OpenShift AI can be used to build
 rh_products:
 - Red Hat OpenShift Container Platform
 - Red Hat OpenShift AI
+partners:
+- IBM Fusion
 industries:
 - financial services
 aliases: /mlops-fraud-detection/
