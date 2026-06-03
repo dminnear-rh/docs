@@ -78,68 +78,14 @@ The documentation outlines the minimum required configuration for an Azure accou
 Changes required Do not accept default sizes for OpenShift install. It is recommended to increase the worker node size to at least Standard_D8s_v5. This can be done by using openshift-install create install-config first and adjusting the workers under platform, for example:
 - architecture: amd64 hyperthreading: Enabled name: worker platform: azure: type: Standard_D8s_v5 replicas: 3 On a cloud provider the virtual machines for the kata containers use &#34;peer pods&#34; which are running directly on the cloud provider’s hypervisor (see the diagram below). This means that access is required to Azure confidential VM families. Azure offers multiple confidential computing VM families including Standard_DCas_v5 (AMD SEV-SNP), Standard_DCes_v5 (Intel TDX), Standard_ECas_v5 (AMD SEV-SNP, memory-optimized), and others. This pattern defaults to Standard_DCas_v5 but can be configured to use other confidential VM families by modifying the VM size parameters in values-global.yaml.
 These confidential VMs are NOT available in all regions. Check Azure products by region to confirm availability of your chosen VM family in your target region.
-Users will also need to request quota increases for their chosen confidential VM family (e.g., Standard_DC2as_v5, Standard_DC4as_v5, Standard_DC8as_v5, Standard_DC16as_v5 for the DCas_v5 family) in their target region. By default, Azure subscriptions may have zero quota for confidential computing VM sizes.
+Users also need to request quota increases for their chosen confidential VM family (for example, Standard_DC2as_v5, Standard_DC4as_v5, Standard_DC8as_v5, Standard_DC16as_v5 for the DCas_v5 family) in their target region. By default, Azure subscriptions may have zero quota for confidential computing VM sizes.
 DNS for the OpenShift cluster MUST be provided by Azure DNS. The pattern uses Azure DNS for both the cluster’s ingress and for cert-manager DNS01 challenge validation when issuing certificates.
 Azure configuration required for the validated pattern The validated pattern requires access to Azure APIs to provision peer-pod VMs.
 Azure configuration information must be provided in two places:
 A secret must be loaded using a ../../../learn/secrets-management-in-the-validated-patterns-framework/[values-secret] file. The values-secret.yaml.template file provides the appropriate structure. The Azure client secret (service principal password) is stored here and loaded into Vault.
 A broader set of information about the cluster is required in values-global.yaml (see below). These values are used by the sandboxed containers operator to provision peer-pod VMs in the correct Azure subscription, resource group, and virtual network.
-global: azure: clientID: &#39;&#39; # Service principal ID subscriptionID: &#39;&#39; tenantID: &#39;&#39; # Tenant ID DNSResGroup: &#39;&#39; # Resource group for the Azure DNS hosted zone hostedZoneName: &#39;&#39; # the hosted zone name clusterResGroup: &#39;&#39; # Resource group of the cluster clusterSubnet: &#39;&#39; # subnet of the cluster clusterNSG: &#39;&#39; # network security group of the worker nodes in the cluster clusterRegion: &#39;&#39; The clusterResGroup, clusterSubnet, and clusterNSG values can be found in the Azure portal after the cluster has been provisioned, or via openshift-install metadata. The DNSResGroup and hostedZoneName correspond to the Azure DNS zone used for the cluster’s base domain.
-`,url:"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-azure-requirements/",breadcrumb:"/patterns/coco-pattern/coco-pattern-azure-requirements/"},"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-tested-environments/":{title:"CoCo pattern tested environments",tags:[],content:`Tested environments Current version (5.*) Version 5 introduces Kyverno-based cc_init_data injection, bare metal support (Intel TDX, AMD SEV-SNP), and Technology Preview NVIDIA confidential GPU support (H100, H200, B100, B200).
-Supported components OpenShift Sandboxed Containers Operator 1.12
-Red Hat Build of Trustee 1.1
-OpenShift Container Platform 4.19.28+
-Kyverno 3.7.*
-cert-manager operator (stable-v1 channel)
-Red Hat Advanced Cluster Management (for multi-cluster topology)
-HashiCorp Vault (secrets management)
-Node Feature Discovery Operator (for bare metal)
-Intel Device Plugins Operator (for Intel TDX)
-NVIDIA GPU Operator v26.3.0+ (for GPU topology)
-Azure single cluster Tested on Azure with the simple clusterGroup using self-managed OpenShift 4.19.28+ provisioned via openshift-install. In this topology all components — Trustee, Vault, ACM, sandboxed containers operator, Kyverno, and sample workloads — are deployed on a single cluster.
-Worker nodes use Standard_D8s_v5 or larger. Peer-pod VMs for confidential containers default to Standard_DC2as_v5 from the Azure confidential computing VM family, but other Azure confidential VM families can be configured in values-global.yaml. Azure DNS is required for the cluster’s hosted zone.
-Important: Azure confidential VM availability varies by region. Before deploying, verify that your target region supports Standard_DCas_v5 VMs and that your subscription has sufficient quota. See the Azure requirements page for regional availability details.
-Azure multiple clusters Tested with trusted-hub + spoke clusterGroups on Azure, both using self-managed OpenShift 4.19.28+.
-trusted-hub: Vault, ACM, Trustee (KBS + attestation service), cert-manager, Kyverno. This cluster acts as the trust anchor and ACM hub.
-spoke: Sandboxed containers operator, Kyverno, peer-pod infrastructure, and sample workloads (hello-openshift, kbs-access). Imported into ACM with the clusterGroup=spoke label.
-The spoke cluster connects back to the hub’s Trustee instance for attestation and secret retrieval. Secrets are synchronised from the hub’s Vault to the spoke via the External Secrets operator.
-Bare metal single cluster (Intel TDX) Tested on Single Node OpenShift (SNO) with Intel TDX hardware using the baremetal clusterGroup. All components run on a single node.
-Hardware configuration: - Intel Xeon Sapphire Rapids processors (4th Gen) with TDX enabled in BIOS - HPP (HostPath Provisioner) for storage - NFD detects TDX capability and labels the node with intel.feature.node.kubernetes.io/tdx=true
-Deployed components: - Trustee, Vault, Kyverno, sandboxed containers operator, NFD, Intel DCAP (PCCS + QGS) - Sample workloads use runtimeClassName: kata-cc with the kata-tdx handler - PCCS connects to Intel PCS API for attestation collateral
-Note: Multi-node bare metal clusters are expected to work but have not been validated.
-Bare metal single cluster (AMD SEV-SNP) Tested on Single Node OpenShift (SNO) with AMD SEV-SNP hardware using the baremetal clusterGroup.
-Hardware configuration: - AMD EPYC Genoa processors with SEV-SNP enabled in BIOS - HPP (HostPath Provisioner) for storage - NFD detects SEV-SNP capability and labels the node with amd.feature.node.kubernetes.io/snp=true
-Deployed components: - Trustee, Vault, Kyverno, sandboxed containers operator, NFD - Sample workloads use runtimeClassName: kata-cc with the kata-snp handler - No PCCS required (AMD uses certificate chain-based attestation)
-Bare metal GPU single cluster (Technology Preview) Tested on Single Node OpenShift (SNO) with Intel TDX and NVIDIA confidential GPUs using the baremetal-gpu clusterGroup. This topology supports both Intel TDX and AMD SEV-SNP as the host TEE platform.
-Hardware configuration: - Intel Xeon Sapphire Rapids processors with TDX enabled in BIOS (tested) or AMD EPYC Milan/Genoa processors with SEV-SNP (expected to work) - NVIDIA confidential GPUs with confidential computing firmware (tested with H100; H200, B100, B200 supported) - IOMMU enabled for GPU passthrough - HPP (HostPath Provisioner) for storage
-Deployed components: - All components from bare metal Intel TDX or AMD SEV-SNP configuration - NVIDIA GPU Operator with CC Manager, VFIO manager, and Kata device plugin - GPU workload (gpu-vectoradd) uses runtimeClassName: kata-cc-nvidia-gpu - GPU attestation integrated with Trustee KBS
-Version history All pattern versions prior to v4 used Technology Preview (pre-GA) releases of Trustee.
-Pattern version Trustee OSC Min OCP Notes 5.* (current)
-1.1 (GA)
-1.12
-4.19.28+
-Kyverno-based cc_init_data injection. Bare metal support (Intel TDX, AMD SEV-SNP). NVIDIA confidential GPU support (Technology Preview: H100, H200, B100, B200).
-4.*
-1.0 (GA)
-1.11
-4.17+
-First GA release. Multi-cluster support. cert-manager replaces Let’s Encrypt.
-3.*
-0.4.* (Tech Preview)
-1.10.*
-4.16
-Single cluster only. Tested on Azure (self-managed and ARO).
-2.*
-0.3.* (Tech Preview)
-1.9.*
-4.16
-Single cluster only. Tested on Azure (self-managed and ARO).
-1.0.0
-0.2.0 (Tech Preview)
-1.8.1
-4.16
-Initial release. Single cluster only. Self-managed OpenShift on Azure.
-`,url:"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-tested-environments/",breadcrumb:"/patterns/coco-pattern/coco-pattern-tested-environments/"},"https://validatedpatterns.io/contribute/contribute-to-docs/":{title:"Contributor's guide",tags:[],content:` Contribute to Validated Patterns documentation Different ways to contribute There are a few different ways you can contribute to Validated Patterns documentation:
+global: azure: clientID: &#39;&#39; # Service principal ID subscriptionID: &#39;&#39; tenantID: &#39;&#39; # Tenant ID DNSResGroup: &#39;&#39; # Resource group for the Azure DNS hosted zone hostedZoneName: &#39;&#39; # the hosted zone name clusterResGroup: &#39;&#39; # Resource group of the cluster clusterSubnet: &#39;&#39; # subnet of the cluster clusterNSG: &#39;&#39; # network security group of the worker nodes in the cluster clusterRegion: &#39;&#39; The clusterResGroup, clusterSubnet, and clusterNSG values can be found in the Azure portal after the cluster has been provisioned, or by using openshift-install metadata. The DNSResGroup and hostedZoneName correspond to the Azure DNS zone used for the cluster’s base domain.
+`,url:"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-azure-requirements/",breadcrumb:"/patterns/coco-pattern/coco-pattern-azure-requirements/"},"https://validatedpatterns.io/contribute/contribute-to-docs/":{title:"Contributor's guide",tags:[],content:` Contribute to Validated Patterns documentation Different ways to contribute There are a few different ways you can contribute to Validated Patterns documentation:
 Email the Validated Patterns team at hybrid-cloud-patterns@googlegroups.com.
 Create a GitHub or Jira issue .
 Submit a pull request (PR). To create a PR, create a local clone of your own fork of the Validated Patterns docs repository, make your changes, and submit a PR. This option is best if you have substantial changes.
@@ -351,118 +297,7 @@ Open Platform for Enterprise AI (OPEA)
 Various microservices
 ChatQnA application
 Hugging Face Llama-3.1-8B-Instruct model
-`,url:"https://validatedpatterns.io/patterns/amd-rag-chat-qna/amd-rag-chat-qna-getting-started/",breadcrumb:"/patterns/amd-rag-chat-qna/amd-rag-chat-qna-getting-started/"},"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-getting-started/":{title:"Getting started",tags:[],content:` Deploying Prerequisites Azure deployments Install an OpenShift 4.19.28+ Cluster on Azure
-Update the required Azure configuration and secrets in values-global.yaml, including the Azure service principal, DNS resource group, and cluster networking details.
-Fork the repository and clone it locally. ArgoCD reconciles against your fork, so all configuration changes must be committed and pushed.
-Run bash scripts/gen-secrets.sh to generate KBS key pairs, attestation policy seeds, and copy the values-secret template to ~/values-secret-coco-pattern.yaml. This script will not overwrite existing secrets.
-Run bash scripts/get-pcr.sh to retrieve PCR measurements from the peer-pod VM image. This stores the measurements at ~/.coco-pattern/measurements.json, which are loaded into Vault and used by the attestation service. Requires podman, skopeo, and a pull secret at ~/pull-secret.json.
-Review and customise ~/values-secret-coco-pattern.yaml. This file controls what secrets are loaded into Vault, including attestation policies, KBS key material, and PCR measurements. See the comments in values-secret.yaml.template for details on each field.
-Bare metal deployments Install OpenShift 4.19.28+ on bare metal with Intel TDX or AMD SEV-SNP hardware
-Ensure BIOS/firmware is configured to enable TDX or SEV-SNP. For Intel TDX, consult the Intel TDX BIOS setup guide. For AMD SEV-SNP, consult the AMD SEV developer documentation and your hardware vendor’s TEE enablement procedures.
-For Intel TDX: Obtain an Intel PCS API key from Intel Trusted Services
-Fork the repository and clone it locally. ArgoCD reconciles against your fork, so all configuration changes must be committed and pushed.
-Run bash scripts/gen-secrets.sh to generate KBS key pairs and PCCS secrets (for Intel TDX)
-For bare metal, PCR measurements must be collected manually after the first boot. See the tested environments page for guidance on PCR collection for bare metal. Store the measurements at ~/.coco-pattern/measurements.json.
-Review and customise ~/values-secret-coco-pattern.yaml. For Intel TDX, uncomment the PCCS secrets section and provide your Intel PCS API key. See the comments in values-secret.yaml.template for details on each field.
-Single cluster deployment The single-cluster topology uses the simple clusterGroup. All components — Trustee, Vault, ACM, sandboxed containers, and workloads — are deployed on one cluster.
-Ensure main.clusterGroupName: simple is set in values-global.yaml
-./pattern.sh make install
-Wait for the cluster to reboot all nodes. The sandboxed containers operator applies a MachineConfig update that triggers a rolling reboot. Monitor progress via the ArgoCD UI or oc get nodes.
-If the services do not come up, use the ArgoCD UI to triage potential timeouts. Peer-pod VMs may need to be restarted if they time out during initial provisioning.
-Multi-cluster deployment The multi-cluster topology separates the trusted zone (hub) from the untrusted workload zone (spoke). The hub cluster runs Trustee, Vault, and ACM. The spoke cluster runs the sandboxed containers operator and confidential workloads.
-Set main.clusterGroupName: trusted-hub in values-global.yaml
-Deploy the hub cluster: ./pattern.sh make install
-Wait for ACM (MultiClusterHub) to reach Running state on the hub cluster: oc get multiclusterhub -n open-cluster-management
-Provision a second OpenShift 4.17+ cluster on Azure for the spoke
-Import the spoke cluster into ACM with the label clusterGroup=spoke (see importing a cluster). ACM will automatically deploy the spoke clusterGroup applications to the imported cluster.
-The spoke cluster will install the sandboxed containers operator, deploy peer-pod infrastructure, and launch the sample workloads. Monitor progress in the ACM console or via ArgoCD on the spoke.
-Bare metal deployment The bare metal topology uses the baremetal clusterGroup for Intel TDX or AMD SEV-SNP hardware without GPUs.
-Set main.clusterGroupName: baremetal in values-global.yaml
-Run bash scripts/gen-secrets.sh to generate KBS key pairs and PCCS secrets (for Intel TDX)
-For Intel TDX: uncomment the PCCS secrets section in ~/values-secret-coco-pattern.yaml and provide your Intel PCS API key. AMD SEV-SNP deployments do not require PCCS.
-Review and customize ~/values-secret-coco-pattern.yaml with any additional secrets or attestation policy customizations
-./pattern.sh make install
-Wait for the cluster to reboot nodes. The pattern applies MachineConfig updates for:
-TDX/SEV-SNP kernel parameters (e.g., kvm_intel.tdx=1 for Intel TDX, kvm_amd.sev=1 for AMD SEV-SNP)
-nohibernate kernel argument
-vsock-loopback kernel module configuration + Monitor node reboot progress: oc get nodes or oc get mcp + Note: MCO-driven reboots during initial deployment may cause Vault secret loading to time out. If secrets fail to load after nodes finish rebooting (oc get mcp shows UPDATED=True), manually re-trigger secret loading by running ./pattern.sh make upgrade.
-Bare metal support is currently tested on Single Node OpenShift (SNO) configurations. Multi-node bare metal clusters are expected to work but have not been validated.
-Automatic hardware detection:
-The pattern automatically detects and configures your TEE hardware:
-Node Feature Discovery (NFD) labels nodes based on detected capabilities:
-Intel TDX: intel.feature.node.kubernetes.io/tdx=true
-AMD SEV-SNP: amd.feature.node.kubernetes.io/snp=true
-HostPath Provisioner (HPP) provides persistent storage for bare metal deployments
-RuntimeClass: The kata-cc RuntimeClass is created automatically, using kata-tdx or kata-snp handler based on detected hardware
-Both kata-tdx and kata-snp RuntimeClasses are deployed; only the one matching your hardware will have schedulable nodes
-Intel DCAP components (PCCS and QGS) deploy unconditionally but DaemonSets only schedule on Intel TDX nodes via NFD label selectors
-Optional PCCS node pinning: For Intel TDX deployments, you can pin the PCCS service to a specific node by running bash scripts/get-pccs-node.sh and setting baremetal.pccs.nodeSelector in the baremetal chart values.
-Bare metal GPU deployment (Technology Preview) The baremetal-gpu topology extends the bare metal deployment with NVIDIA confidential GPU support (H100, H200, B100, B200). This topology works with both Intel TDX and AMD SEV-SNP as the host TEE platform.
-Set main.clusterGroupName: baremetal-gpu in values-global.yaml
-Run bash scripts/gen-secrets.sh to generate KBS keys and PCCS secrets
-For Intel TDX: uncomment the PCCS secrets in ~/values-secret-coco-pattern.yaml and provide your Intel PCS API key
-./pattern.sh make install
-Wait for the cluster to reboot nodes. The GPU topology adds IOMMU configuration to the MachineConfig, which enables GPU passthrough to confidential VMs:
-Intel: intel_iommu=on
-AMD: amd_iommu=on + All nodes will reboot to apply these kernel parameters. + Note: MCO-driven reboots may cause Vault secret loading to time out. If needed, re-run ./pattern.sh make upgrade after nodes finish rebooting.
-Approve the GPU Operator install plan when it appears. The pattern uses installPlanApproval: Manual to ensure version control. Check for pending install plans: + [source,bash] ---- oc get installplan -n nvidia-gpu-operator ---- + Approve the install plan: + [source,bash] ---- oc patch installplan &lt;install-plan-name&gt; -n nvidia-gpu-operator \\ --type merge -p &#39;{&#34;spec&#34;:{&#34;approved&#34;:true}}&#39; ----
-The baremetal-gpu topology applies IOMMU MachineConfig to all nodes and triggers reboots even on clusters without GPUs. If you do not have GPUs, use the baremetal topology instead. The GPU workload (gpu-vectoradd) will remain in Pending state on systems without GPUs but is otherwise harmless.
-GPU-specific components:
-NVIDIA GPU Operator: Manages GPU drivers, device plugins, and confidential computing manager
-Kata device plugin: Exposes GPUs as schedulable resources (nvidia.com/pgpu)
-CC Manager: Enables confidential mode at the GPU firmware level
-VFIO Manager: Binds GPUs to VFIO for passthrough to Kata VMs
-RuntimeClass: kata-cc-nvidia-gpu is created for GPU-enabled confidential pods
-GPU workload verification:
-The pattern deploys a gpu-vectoradd sample workload that runs a CUDA vector addition inside a confidential container. Check the logs to verify GPU functionality:
-oc logs -n gpu-workload deployment/gpu-vectoradd Expected output should show successful CUDA execution and GPU device detection.
-Updating PCR measurements Platform Configuration Register (PCR) measurements are cryptographic hashes of the peer-pod VM’s boot components and runtime state. The attestation service verifies these measurements to ensure workloads are running in a genuine, unmodified TEE. When the peer-pod VM image is updated (for example, when upgrading OpenShift Sandboxed Containers), the PCR values change and must be refreshed.
-When to update PCR measurements Update PCR measurements after:
-Upgrading the OpenShift Sandboxed Containers operator
-Updating the peer-pod VM image (podvm-image configmap)
-Changing kernel parameters or boot configuration in the peer-pod image
-Applying security patches that modify the VM boot chain
-Update workflow Retrieve new measurements: Run the PCR extraction script against the updated peer-pod image:
-bash scripts/get-pcr.sh This fetches the current peer-pod image from your cluster’s registry, extracts the measurements, and stores them at ~/.coco-pattern/measurements.json.
-Update Vault secrets: The measurements are loaded into Vault via values-secret-coco-pattern.yaml. If you previously deployed the pattern, update the pcrMeasurements field in your values-secret file with the new content from ~/.coco-pattern/measurements.json.
-Sync to the cluster: Push the updated values-secret file to refresh Vault:
-./pattern.sh make upgrade This reloads secrets into Vault and triggers the External Secrets operator to sync the new PCR values to the trustee-operator-system namespace.
-Restart the attestation service: The attestation service caches policy configuration. Restart it to pick up the new PCR measurements:
-oc rollout restart deployment/kbs-deployment -n trustee-operator-system Verify: Deploy a test confidential pod or restart an existing one. Check the KBS logs to confirm successful attestation with the new measurements:
-oc logs -n trustee-operator-system -l app=kbs -f | grep &#34;Attestation succeeded&#34; Troubleshooting attestation failures If confidential pods fail to start or cannot retrieve secrets after an update:
-Check KBS logs for attestation errors:
-oc logs -n trustee-operator-system -l app=kbs --tail=100 Look for messages like PCR mismatch or Attestation verification failed.
-Verify PCR measurements are loaded into Vault and synced to the cluster:
-# Check Vault has the measurements oc exec -n vault vault-0 -- vault kv get secret/hub/pcrMeasurements # Check the External Secret synced to the namespace oc get secret -n trustee-operator-system attestation-policy -o yaml Compare expected vs actual PCR values: The KBS logs show the PCR values presented by the peer-pod. Compare these against the expected values in ~/.coco-pattern/measurements.json. If they differ, re-run scripts/get-pcr.sh to ensure you extracted measurements from the correct image version.
-Confirm peer-pod image version: Verify the peer-pod is using the expected image:
-# Check the peer-pod configmap oc get configmap peer-pods-cm -n openshift-sandboxed-containers-operator -o yaml | grep podvm-image If the PCR values still do not match after following these steps, the peer-pod VM image may have been modified outside the standard upgrade process, or hyperthreading/firmware settings may differ from the image used during PCR extraction.
-Simple Confidential container tests The pattern deploys some simple tests of CoCo with this pattern. A &#34;Hello Openshift&#34; (e.g. curl to return &#34;Hello Openshift!&#34;) application has been deployed in three configurations:
-A vanilla kubernetes pod: oc get pods -n hello-openshift standard
-A confidential container with a strict policy: oc get pods -n hello-openshift secure
-A confidential container with a relaxed policy: oc get pods -n hello-openshift insecure-policy
-In this case the insecure policy is designed to allow a user to be able to exec into the confidential container. Typically this is disabled by an immutable policy established at pod creation time.
-Doing oc get pod -n hello-openshift secure -o yaml for either of the pods running a confidential container should show:
-Azure deployments: runtimeClassName: kata-remote (peer-pod provisioned on Azure hypervisor)
-Bare metal deployments: runtimeClassName: kata-cc (Kata container running on TDX/SEV-SNP hardware)
-Bare metal GPU deployments: runtimeClassName: kata-cc-nvidia-gpu (GPU-enabled Kata container)
-Azure-specific verification: Logging into the Azure portal once the pods have been provisioned will show that each confidential pod has its own Standard_DC2as_v5 virtual machine. These VMs are visible under the cluster’s resource group.
-oc exec testing In an OpenShift cluster without confidential containers, Role Based Access Control (RBAC) may be used to prevent users from using oc exec to access a container to mutate it. However:
-Cluster admins can always circumvent this capability
-Anyone logged into the node directly can also circumvent this capability
-Confidential containers enforce this boundary at the hardware level, independent of RBAC. Running: oc exec -n hello-openshift -it secure — bash will result in a denial of access, irrespective of the user undertaking the action, including kubeadmin. The policy is baked into the pod at creation time and cannot be modified at runtime.
-For comparison, oc exec -n hello-openshift -it standard — bash (the standard pod) and oc exec -n hello-openshift -it insecure-policy — bash (the CoCo pod with a relaxed policy) will both allow shell access.
-Confidential Data Hub testing Part of the CoCo VM is a component called the Confidential Data Hub (CDH), which simplifies access to the Trustee Key Broker Service (KBS) for end applications. The CDH runs inside the confidential VM and handles attestation transparently — applications simply make HTTP requests to a localhost endpoint.
-Find out more about how the CDH and Trustee work together here.
-The CDH presents to containers within the pod (only), via a localhost URL. The CoCo container with an insecure policy can be used for testing the behaviour, since it allows oc exec.
-oc exec -n hello-openshift -it insecure-policy — bash to get a shell into a confidential container
-Trustee’s configuration specifies the list of secrets which the KBS can access with the kbsSecretResources attribute. These are mapped to Vault paths (e.g. secret/data/hub/kbsres1).
-Secrets within the CDH can be accessed (by default) at http://127.0.0.1:8006/cdh/resource/default/$K8S_SECRET/$K8S_SECRET_KEY.
-In this case http://127.0.0.1:8006/cdh/resource/default/passphrase/passphrase by default will return a string which was randomly generated when the pattern was deployed.
-To verify, compare the CDH output against the Vault-backed secret: oc get secrets -n trustee-operator-system passphrase -o yaml | yq &#39;.data.passphrase&#39; | base64 -d. The values should match.
-Tailing the logs for the KBS container (e.g. oc logs -n trustee-operator-system -l app=kbs -f) shows the attestation evidence flowing from the CDH to the KBS, including TEE evidence validation.
-kbs-access application The kbs-access application is a web service deployed in the kbs-access namespace. It retrieves secrets from Trustee via the CDH and presents them through a web interface. This provides a convenient way to verify that the full attestation pipeline is working end-to-end without needing to exec into a pod.
-Access the application via its OpenShift route: oc get route -n kbs-access.
-`,url:"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-getting-started/",breadcrumb:"/patterns/coco-pattern/coco-pattern-getting-started/"},"https://validatedpatterns.io/patterns/emerging-disease-detection/edd-getting-started/":{title:"Getting started",tags:[],content:` Deploying the Emerging Disease Detection pattern Prerequisites An OpenShift cluster (Go to the OpenShift console). Cluster must have a dynamic StorageClass to provision PersistentVolumes.
+`,url:"https://validatedpatterns.io/patterns/amd-rag-chat-qna/amd-rag-chat-qna-getting-started/",breadcrumb:"/patterns/amd-rag-chat-qna/amd-rag-chat-qna-getting-started/"},"https://validatedpatterns.io/patterns/emerging-disease-detection/edd-getting-started/":{title:"Getting started",tags:[],content:` Deploying the Emerging Disease Detection pattern Prerequisites An OpenShift cluster (Go to the OpenShift console). Cluster must have a dynamic StorageClass to provision PersistentVolumes.
 A GitHub account (and a token for it with repositories permissions, to read from and write to your forks)
 For installation tooling dependencies, see Patterns quick start.
 The use of this pattern depends on having a Red Hat OpenShift cluster. In this version of the validated pattern there is no dedicated Hub / Edge cluster for the Emerging Disease Detection pattern. This single node pattern can be extend as a managed cluster(s) to a central hub.
@@ -1162,7 +997,38 @@ Obtain an API token by visiting https://oauth-openshift.apps.&lt;your_cluster&gt
 Log in to the cluster by running the following command:
 $ oc login --token=&lt;retrieved-token&gt; --server=https://api.&lt;your_cluster&gt;.&lt;domain&gt;:6443 Or log in by running the following command:
 $ export KUBECONFIG=~/&lt;path_to_kubeconfig&gt; Deploy the pattern to your cluster. Run the following command:
-$ ./pattern.sh make install `,url:"https://validatedpatterns.io/patterns/portworx-dr/getting-started/",breadcrumb:"/patterns/portworx-dr/getting-started/"},"https://validatedpatterns.io/patterns/ansible-edge-gitops-kasten/getting-started/":{title:"Getting Started",tags:[],content:`Deploying the OpenShift Virtualization Data Protection Pattern General Prerequisites An OpenShift cluster ( Go to the OpenShift console). See also sizing your cluster. Currently this pattern only supports AWS. It could also run on a baremetal OpenShift cluster, because OpenShift Virtualization supports that; there would need to be some customizations made to support it as the default is AWS. We hope that GCP and Azure will support provisioning metal workers in due course so this can be a more clearly multicloud pattern. A GitHub account (and, optionally, a token for it with repositories permissions, to read from and write to your forks) The helm binary, see here Ansible, which is used in the bootstrap and provisioning phases of the pattern install (and to configure Ansible Automation Platform). Please note that when run on AWS, this pattern will provision an additional worker node, which will be a metal instance (c5n.metal) to run the Edge Virtual Machines. This worker is provisioned through the OpenShift MachineAPI and will be automatically cleaned up when the cluster is destroyed. The use of this pattern depends on having a running Red Hat OpenShift cluster. It is desirable to have a cluster for deploying the GitOps management hub assets and a separate cluster(s) for the managed cluster(s).
+$ ./pattern.sh make install `,url:"https://validatedpatterns.io/patterns/portworx-dr/getting-started/",breadcrumb:"/patterns/portworx-dr/getting-started/"},"https://validatedpatterns.io/patterns/rag-quickstart/getting-started/":{title:"Getting started",tags:[],content:` Deploying the RAG AI Quickstart pattern Prerequisites An OpenShift cluster (version 4.18 or later)
+To create an OpenShift cluster, go to the Red Hat Hybrid Cloud console.
+Select OpenShift -&gt; Red Hat OpenShift Container Platform -&gt; Create cluster.
+A HuggingFace account with an API token that has read permissions.
+You must accept the terms and conditions for the meta-llama/Llama-3.2-3B-Instruct model with the account that the API token belongs to.
+The Helm binary. For instructions, see Installing Helm.
+Additional installation tool dependencies. For details, see Patterns quick start.
+Preparing for deployment Procedure Fork the ai-quickstart-rag repository on GitHub. You must fork the repository to customize this pattern.
+Clone the forked copy of this repository.
+$ git clone git@github.com:your-username/ai-quickstart-rag.git Go to the root directory of your Git repository:
+$ cd ai-quickstart-rag Run the following command to set the upstream repository:
+$ git remote add -f upstream git@github.com:validatedpatterns-sandbox/ai-quickstart-rag.git Verify the setup of your remote repositories by running the following command:
+$ git remote -v Example output origin	git@github.com:your-username/ai-quickstart-rag.git (fetch) origin	git@github.com:your-username/ai-quickstart-rag.git (push) upstream	git@github.com:validatedpatterns-sandbox/ai-quickstart-rag.git (fetch) upstream	git@github.com:validatedpatterns-sandbox/ai-quickstart-rag.git (push) Make a local copy of the secrets template outside of your repository to hold credentials for the pattern.
+Do not add, commit, or push this file to your repository. Doing so may expose personal credentials to GitHub.
+Run the following command:
+$ cp values-secret.yaml.template ~/values-secret-ai-quickstart-rag.yaml Populate this file with secrets, or credentials, that are needed to deploy the pattern successfully:
+$ vim ~/values-secret-ai-quickstart-rag.yaml Edit the llm-service section to use your HuggingFace API token:
+- name: llm-service fields: - name: hf_token value: hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Optional: To customize the deployment, create and switch to a new branch by running the following command:
+$ git checkout -b my-branch Make your changes, then stage and commit them:
+$ git add &lt;changed-files&gt; $ git commit -m &#34;Customize deployment&#34; Push the changes to your forked repository:
+$ git push origin my-branch Deploying the pattern by using the pattern.sh file To deploy the pattern by using the pattern.sh file, complete the following steps:
+Log in to your cluster by following this procedure:
+Obtain an API token by visiting https://oauth-openshift.apps.&lt;your_cluster&gt;.&lt;domain&gt;/oauth/token/request.
+Log in to the cluster by running the following command:
+$ oc login --token=&lt;retrieved-token&gt; --server=https://api.&lt;your_cluster&gt;.&lt;domain&gt;:6443 Or log in by running the following command:
+$ export KUBECONFIG=~/&lt;path_to_kubeconfig&gt; Deploy the pattern to your cluster. Run the following command:
+$ ./pattern.sh make install Verification To verify a successful installation, check the health of the ArgoCD applications:
+Run the following command:
+$ ./pattern.sh make argo-healthcheck It might take several minutes for all applications to synchronize and reach a healthy state. This includes downloading the LLM models and populating the vector database.
+Verify that the Operators are installed by navigating to Operators → Installed Operators in the OpenShift Container Platform web console.
+After all applications are healthy, open the RAG chatbot UI by clicking the route link in the Networking → Routes page of the ai-quickstart-rag-prod namespace.
+`,url:"https://validatedpatterns.io/patterns/rag-quickstart/getting-started/",breadcrumb:"/patterns/rag-quickstart/getting-started/"},"https://validatedpatterns.io/patterns/ansible-edge-gitops-kasten/getting-started/":{title:"Getting Started",tags:[],content:`Deploying the OpenShift Virtualization Data Protection Pattern General Prerequisites An OpenShift cluster ( Go to the OpenShift console). See also sizing your cluster. Currently this pattern only supports AWS. It could also run on a baremetal OpenShift cluster, because OpenShift Virtualization supports that; there would need to be some customizations made to support it as the default is AWS. We hope that GCP and Azure will support provisioning metal workers in due course so this can be a more clearly multicloud pattern. A GitHub account (and, optionally, a token for it with repositories permissions, to read from and write to your forks) The helm binary, see here Ansible, which is used in the bootstrap and provisioning phases of the pattern install (and to configure Ansible Automation Platform). Please note that when run on AWS, this pattern will provision an additional worker node, which will be a metal instance (c5n.metal) to run the Edge Virtual Machines. This worker is provisioned through the OpenShift MachineAPI and will be automatically cleaned up when the cluster is destroyed. The use of this pattern depends on having a running Red Hat OpenShift cluster. It is desirable to have a cluster for deploying the GitOps management hub assets and a separate cluster(s) for the managed cluster(s).
 If you do not have a running Red Hat OpenShift cluster you can start one on a public or private cloud by using Red Hat&rsquo;s cloud service.
 Credentials Required in Pattern In addition to the OpenShift cluster, you will need to prepare a number of secrets, or credentials, which will be used in the pattern in various ways. To do this, copy the values-secret.yaml template to your home directory as values-secret.yaml and replace the explanatory text as follows:
 AWS Credentials (an access key and a secret key). These are used to provision the metal worker in AWS (which hosts the VMs) and (by default) to access a pre-created S3 bucket for exporting VM backups with Veeam Kasten. --- # NEVER COMMIT THESE VALUES TO GIT version: &#34;2.0&#34; secrets: - name: aws-creds fields: - name: aws_access_key_id value: &#39;An aws access key that can provision EC2 VMs and read/write to S3&#39; - name: aws_secret_access_key value: &#39;An aws access secret key that can provision VMs and read/write to S3&#39; A username and SSH Keypair (private key and public key). These will be used to provide access to the Kiosk VMs in the demo. - name: kiosk-ssh fields: # Username of user to which the privatekey and publickey are attached - cloud-user is a typical value - name: username value: &#39;cloud-user&#39; # Private ssh key of the user who will be able to elevate to root to provision kiosks - name: privatekey value: | -----BEGIN OPENSSH PRIVATE KEY----- b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAACFwAAAAdzc2gtcn ... 5nZRiM0qkhEAAAAKY2xvdWQtdXNlcgE= -----END OPENSSH PRIVATE KEY----- # Public ssh key of the user who will be able to elevate to root to provision kiosks - name: publickey value: | ssh-rsa AAAAB3NzaC1yc2EAAAA...xiVgKANw== cloud-user A Red Hat Subscription Management username and password. These will be used to register Kiosk VM templates to the Red Hat Content Delivery Network and install content on the Kiosk VMs to run the demo. - name: rhsm fields: - name: username value: &#39;username of user to register RHEL VMs&#39; - name: password value: &#39;password of rhsm user in plaintext&#39; Container &ldquo;extra&rdquo; arguments which will set the admin password for the ignition application when it&rsquo;s running. - name: kiosk-extra fields: # Optional extra params to pass to kiosk ignition container, including admin password - name: container_extra_params value: &#39;--privileged -e GATEWAY_ADMIN_PASSWORD=redhat&#39; A userData block to use with cloud-init. This will allow console login as the user you specify (traditionally cloud-user) with the password you specify. The value in cloud-init is used as the default; roles in the edge-gitops-vms chart can also specify other secrets to use by referencing them in the role block. - name: cloud-init fields: - name: userData value: |- #cloud-config user: &#39;username of user for console, probably cloud-user&#39; password: &#39;a suitable password to use on the console&#39; chpasswd: { expire: False } A manifest file with an entitlement to run Ansible Automation Platform. This file (which will be a .zip file) will be posted to Ansible Automation Platform instance to enable its use. Instructions for creating a manifest file can be found here - name: aap-manifest fields: - name: b64content # Ex. /Users/john.doe/ansible-edge-gitops-kasten/my-aap-manifest.zip path: &#39;full path and file name of the Satellite Manifest .zip for entitling Ansible Automation Platform&#39; base64: true A passphrase that will be used to encrypt backups of the Veeam Kasten internal catalog of restore points, a process known as Kasten DR. These Kasten DR backups can be used to restore access to the catalog of previously created application backups in the event of infrastructure failure or cluster loss. - name: kastendr-passphrase fields: - name: key value: &#39;passphrase&#39; Prerequisites for deployment via make install If you are going to install via make install from your workstation, you will need the following tools and packages:
@@ -2495,7 +2361,17 @@ dbProvidersSecret: vault: - key: mssql field: sapassword - key: pgvector # &lt;-
 In your local branch of the rag-llm-gitops git repository change to the ansible/playbooks/templates directory.
 Edit the file gpu-machine-sets.j2 changing the instanceType to for example g5.4xlarge. Save and exit.
 Push the changes to the origin remote repository by running the following command:
-$ git push origin my-test-branch `,url:"https://validatedpatterns.io/patterns/rag-llm-gitops/gpu_provisioning/",breadcrumb:"/patterns/rag-llm-gitops/gpu_provisioning/"},"https://validatedpatterns.io/patterns/mlops-fraud-detection/mfd-explore-this-pattern/":{title:"Explore this pattern",tags:[],content:` Red Hat OpenShift AI components Most components installed as part of this pattern are available in the Red Hat OpenShift AI (RHOAI) console. To navigate to this page, click the Red Hat OpenShift AI link in the application launcher of the OpenShift console.
+$ git push origin my-test-branch `,url:"https://validatedpatterns.io/patterns/rag-llm-gitops/gpu_provisioning/",breadcrumb:"/patterns/rag-llm-gitops/gpu_provisioning/"},"https://validatedpatterns.io/patterns/rag-quickstart/customizing-this-pattern/":{title:"Customizing this pattern",tags:[],content:` Customizing the RAG AI Quickstart pattern Without any changes, this pattern runs a CPU-backed LLM and does not require a GPU. This can be limiting in terms of usable models as well as speed, so you might want to use a GPU instead.
+Enabling GPU support To enable GPU support, set global.device to gpu in values-global.yaml and push your changes to GitHub. This adds NFD and the NVIDIA GPU Operator to the pattern installation and enables the models to run using an NVIDIA accelerator.
+If you are running this pattern on an OpenShift cluster on AWS, setting global.device to gpu automatically creates a GPU (g6.2xlarge) machine and add it as a worker node to your cluster.
+Changing models To update the models, edit overrides/values-cpu.yaml (if global.device is set to cpu) or overrides/values-gpu.yaml (if set to gpu).
+The default CPU-based model is defined as follows:
+global: models: llama-3-2-3b-instruct-cpu: id: meta-llama/Llama-3.2-3B-Instruct enabled: true resources: limits: cpu: &#34;6&#34; memory: 48Gi requests: cpu: &#34;2&#34; memory: 24Gi args: - --enable-auto-tool-choice - --chat-template - /chat-templates/tool_chat_template_llama3.2_json.jinja - --tool-call-parser - llama3_json - --dtype - auto - --max-model-len - &#34;16384&#34; - --max-num-seqs - &#34;1&#34; You can change this to any vLLM-compatible model that you have accepted the terms and conditions for with your HuggingFace API token. You can also adjust the resource parameters as needed for your environment.
+The runtime defaults to vllm/vllm-openai:v0.11.1. If you need a later version, you can override the image:
+llm-service: deviceConfigs: gpu: image: vllm/vllm-openai:nightly The example above sets a GPU-specific container image. To override the CPU-based image instead, use the key llm-service.deviceConfigs.cpu.image.
+Defining multiple models You can define multiple LLM models to be served simultaneously. For example:
+global: models: deepseek-r1: id: Valdemardi/DeepSeek-R1-Distill-Llama-70B-AWQ enabled: true resources: limits: cpu: &#34;32&#34; memory: 200Gi requests: cpu: &#34;24&#34; memory: 150Gi args: - --reasoning-parser - deepseek_r1 - --tool-call-parser - llama3_json - --enable-auto-tool-choice - --quantization - awq_marlin - --dtype - float16 - --max-model-len - &#34;65536&#34; gpt-oss-120b: id: openai/gpt-oss-120b enabled: true resources: limits: cpu: &#34;32&#34; memory: 200Gi requests: cpu: &#34;24&#34; memory: 150Gi args: - --tool-call-parser - openai - --enable-auto-tool-choice For a complete list of customizable values, see the AI Architecture charts repository.
+`,url:"https://validatedpatterns.io/patterns/rag-quickstart/customizing-this-pattern/",breadcrumb:"/patterns/rag-quickstart/customizing-this-pattern/"},"https://validatedpatterns.io/patterns/mlops-fraud-detection/mfd-explore-this-pattern/":{title:"Explore this pattern",tags:[],content:` Red Hat OpenShift AI components Most components installed as part of this pattern are available in the Red Hat OpenShift AI (RHOAI) console. To navigate to this page, click the Red Hat OpenShift AI link in the application launcher of the OpenShift console.
 Figure 1. The RHOAI Link Kubeflow pipeline The pattern installation automatically creates and runs a Kubeflow pipeline to build and train the fraud detection model. To view pipeline details in the RHOAI console, select the Pipelines tab.
 Figure 2. The pipelines tab This tab displays the fraud-detection pipeline deployed as part of this pattern. To view the specific run that trained the initial model, select the Runs tab and then select the job-run item.
 Figure 3. The runs tab The Runs page displays a diagram of the pipeline, which includes the following three major steps:
@@ -2509,7 +2385,118 @@ Figure 5. The model deployment Inferencing application The pattern installs a si
 Figure 6. The inferencing application link You can manually configure transaction details in the form. The application includes two examples: a fraudulent transaction and a non-fraudulent transaction.
 Figure 7. Using the fraud example Due to the non-deterministic nature of the training process, the model might not always identify these transactions accurately.
 The source code for the inferencing application is available in the pattern repository at src/inferencing-app.
-`,url:"https://validatedpatterns.io/patterns/mlops-fraud-detection/mfd-explore-this-pattern/",breadcrumb:"/patterns/mlops-fraud-detection/mfd-explore-this-pattern/"},"https://validatedpatterns.io/patterns/trilio-continuous-recovery/getting-started/":{title:"Getting started",tags:[],content:`Deploying the pattern Deployment 1. Clone the repository git clone https://github.com/trilio-demo/trilio-continuous-restore cd trilio-continuous-restore 2. Configure S3 bucket details Edit values-hub.yaml and values-secondary.yaml to set your S3 bucket name and region:
+`,url:"https://validatedpatterns.io/patterns/mlops-fraud-detection/mfd-explore-this-pattern/",breadcrumb:"/patterns/mlops-fraud-detection/mfd-explore-this-pattern/"},"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-getting-started/":{title:"Getting started",tags:[],content:` Deploying Prerequisites Azure deployments Install an OpenShift 4.19.28+ Cluster on Azure
+Update the required Azure configuration and secrets in values-global.yaml, including the Azure service principal, DNS resource group, and cluster networking details.
+Fork the repository and clone it locally. ArgoCD reconciles against your fork, so all configuration changes must be committed and pushed.
+Run bash scripts/gen-secrets.sh to generate KBS key pairs, attestation policy seeds, and copy the values-secret template to ~/values-secret-coco-pattern.yaml. This script does not overwrite existing secrets.
+Run bash scripts/get-pcr.sh to retrieve PCR measurements from the peer-pod VM image. This stores the measurements at ~/.coco-pattern/measurements.json, which are loaded into Vault and used by the attestation service. Requires podman, skopeo, and a pull secret at ~/pull-secret.json.
+Review and customize ~/values-secret-coco-pattern.yaml. This file controls what secrets are loaded into Vault, including attestation policies, KBS key material, and PCR measurements. See the comments in values-secret.yaml.template for details on each field.
+Bare metal deployments Install OpenShift 4.19.28+ on bare metal with Intel TDX or AMD SEV-SNP hardware
+Ensure BIOS/firmware is configured to enable TDX or SEV-SNP. For Intel TDX, consult the Intel TDX BIOS setup guide. For AMD SEV-SNP, consult the AMD SEV developer documentation and your hardware vendor’s TEE enablement procedures.
+For Intel TDX: Obtain an Intel PCS API key from Intel Trusted Services
+Fork the repository and clone it locally. ArgoCD reconciles against your fork, so all configuration changes must be committed and pushed.
+Run bash scripts/gen-secrets.sh to generate KBS key pairs and PCCS secrets (for Intel TDX)
+For bare metal, PCR measurements must be collected manually after the first boot. See the tested environments page for guidance on PCR collection for bare metal. Store the measurements at ~/.coco-pattern/measurements.json.
+Review and customize ~/values-secret-coco-pattern.yaml. For Intel TDX, uncomment the PCCS secrets section and provide your Intel PCS API key. See the comments in values-secret.yaml.template for details on each field.
+Single cluster deployment The single-cluster topology uses the simple clusterGroup. All components, including Trustee, Vault, ACM, sandboxed containers, and workloads, are deployed on one cluster.
+Ensure main.clusterGroupName: simple is set in values-global.yaml
+./pattern.sh make install
+Wait for the cluster to reboot all nodes. The sandboxed containers operator applies a MachineConfig update that triggers a rolling reboot. Monitor progress in the ArgoCD UI or by running oc get nodes.
+If the services do not come up, use the ArgoCD UI to triage potential timeouts. Peer-pod VMs may need to be restarted if they time out during initial provisioning.
+Multi-cluster deployment The multi-cluster topology separates the trusted zone (hub) from the untrusted workload zone (spoke). The hub cluster runs Trustee, Vault, and ACM. The spoke cluster runs the sandboxed containers operator and confidential workloads.
+Set main.clusterGroupName: trusted-hub in values-global.yaml
+Deploy the hub cluster: ./pattern.sh make install
+Wait for ACM (MultiClusterHub) to reach Running state on the hub cluster: oc get multiclusterhub -n open-cluster-management
+Provision a second OpenShift 4.17+ cluster on Azure for the spoke
+Import the spoke cluster into ACM with the label clusterGroup=spoke (see importing a cluster). ACM automatically deploys the spoke clusterGroup applications to the imported cluster.
+The spoke cluster installs the sandboxed containers operator, deploys peer-pod infrastructure, and launches the sample workloads. Monitor progress in the ACM console or in ArgoCD on the spoke.
+Bare metal deployment The bare metal topology uses the baremetal clusterGroup for Intel TDX or AMD SEV-SNP hardware without GPUs.
+Set main.clusterGroupName: baremetal in values-global.yaml
+Run bash scripts/gen-secrets.sh to generate KBS key pairs and PCCS secrets (for Intel TDX)
+For Intel TDX: uncomment the PCCS secrets section in ~/values-secret-coco-pattern.yaml and provide your Intel PCS API key. AMD SEV-SNP deployments do not require PCCS.
+Review and customize ~/values-secret-coco-pattern.yaml with any additional secrets or attestation policy customizations
+./pattern.sh make install
+Wait for the cluster to reboot nodes. The pattern applies MachineConfig updates for:
+TDX/SEV-SNP kernel parameters (for example, kvm_intel.tdx=1 for Intel TDX, kvm_amd.sev=1 for AMD SEV-SNP)
+nohibernate kernel argument
+vsock-loopback kernel module configuration + Monitor node reboot progress: oc get nodes or oc get mcp + Note: MCO-driven reboots during initial deployment may cause Vault secret loading to time out. If secrets fail to load after nodes finish rebooting (oc get mcp shows UPDATED=True), manually re-trigger secret loading by running ./pattern.sh make upgrade.
+Bare metal support is currently tested on Single Node OpenShift (SNO) configurations. Multi-node bare metal clusters are expected to work but have not been validated.
+Automatic hardware detection:
+The pattern automatically detects and configures your TEE hardware:
+Node Feature Discovery (NFD) labels nodes based on detected capabilities:
+Intel TDX: intel.feature.node.kubernetes.io/tdx=true
+AMD SEV-SNP: amd.feature.node.kubernetes.io/snp=true
+HostPath Provisioner (HPP) provides persistent storage for bare metal deployments
+RuntimeClass: The kata-cc RuntimeClass is created automatically, using kata-tdx or kata-snp handler based on detected hardware
+Both kata-tdx and kata-snp RuntimeClasses are deployed; only the one matching your hardware has schedulable nodes
+Intel DCAP components (PCCS and QGS) deploy unconditionally but DaemonSets only schedule on Intel TDX nodes by using NFD label selectors
+Optional PCCS node pinning: For Intel TDX deployments, you can pin the PCCS service to a specific node by running bash scripts/get-pccs-node.sh and setting baremetal.pccs.nodeSelector in the baremetal chart values.
+Bare metal GPU deployment (Technology Preview) The baremetal-gpu topology extends the bare metal deployment with NVIDIA confidential GPU support (H100, H200, B100, B200). This topology works with both Intel TDX and AMD SEV-SNP as the host TEE platform.
+Set main.clusterGroupName: baremetal-gpu in values-global.yaml
+Run bash scripts/gen-secrets.sh to generate KBS keys and PCCS secrets
+For Intel TDX: uncomment the PCCS secrets in ~/values-secret-coco-pattern.yaml and provide your Intel PCS API key
+./pattern.sh make install
+Wait for the cluster to reboot nodes. The GPU topology adds IOMMU configuration to the MachineConfig, which enables GPU passthrough to confidential VMs:
+Intel: intel_iommu=on
+AMD: amd_iommu=on + All nodes reboot to apply these kernel parameters. + Note: MCO-driven reboots may cause Vault secret loading to time out. If needed, re-run ./pattern.sh make upgrade after nodes finish rebooting.
+Approve the GPU Operator install plan when it appears. The pattern uses installPlanApproval: Manual to ensure version control. Check for pending install plans: + [source,bash] ---- oc get installplan -n nvidia-gpu-operator ---- + Approve the install plan: + [source,bash] ---- oc patch installplan &lt;install-plan-name&gt; -n nvidia-gpu-operator \\ --type merge -p &#39;{&#34;spec&#34;:{&#34;approved&#34;:true}}&#39; ----
+The baremetal-gpu topology applies IOMMU MachineConfig to all nodes and triggers reboots even on clusters without GPUs. If you do not have GPUs, use the baremetal topology instead. The GPU workload (gpu-vectoradd) remains in Pending state on systems without GPUs but is otherwise harmless.
+GPU-specific components:
+NVIDIA GPU Operator: Manages GPU drivers, device plugins, and confidential computing manager
+Kata device plugin: Exposes GPUs as schedulable resources (nvidia.com/pgpu)
+CC Manager: Enables confidential mode at the GPU firmware level
+VFIO Manager: Binds GPUs to VFIO for passthrough to Kata VMs
+RuntimeClass: kata-cc-nvidia-gpu is created for GPU-enabled confidential pods
+GPU workload verification:
+The pattern deploys a gpu-vectoradd sample workload that runs a CUDA vector addition inside a confidential container. Check the logs to verify GPU functionality:
+oc logs -n gpu-workload deployment/gpu-vectoradd The expected output shows successful CUDA execution and GPU device detection.
+Updating PCR measurements Platform Configuration Register (PCR) measurements are cryptographic hashes of the peer-pod VM’s boot components and runtime state. The attestation service verifies these measurements to ensure workloads are running in a genuine, unmodified TEE. When the peer-pod VM image is updated (for example, when upgrading OpenShift Sandboxed Containers), the PCR values change and must be refreshed.
+When to update PCR measurements Update PCR measurements after:
+Upgrading the OpenShift Sandboxed Containers operator
+Updating the peer-pod VM image (podvm-image configmap)
+Changing kernel parameters or boot configuration in the peer-pod image
+Applying security patches that modify the VM boot chain
+Update workflow Retrieve new measurements: Run the PCR extraction script against the updated peer-pod image:
+bash scripts/get-pcr.sh This fetches the current peer-pod image from your cluster’s registry, extracts the measurements, and stores them at ~/.coco-pattern/measurements.json.
+Update Vault secrets: The measurements are loaded into Vault by using values-secret-coco-pattern.yaml. If you previously deployed the pattern, update the pcrMeasurements field in your values-secret file with the new content from ~/.coco-pattern/measurements.json.
+Sync to the cluster: Push the updated values-secret file to refresh Vault:
+./pattern.sh make upgrade This reloads secrets into Vault and triggers the External Secrets operator to sync the new PCR values to the trustee-operator-system namespace.
+Restart the attestation service: The attestation service caches policy configuration. Restart it to pick up the new PCR measurements:
+oc rollout restart deployment/kbs-deployment -n trustee-operator-system Verify: Deploy a test confidential pod or restart an existing one. Check the KBS logs to confirm successful attestation with the new measurements:
+oc logs -n trustee-operator-system -l app=kbs -f | grep &#34;Attestation succeeded&#34; Troubleshooting attestation failures If confidential pods fail to start or cannot retrieve secrets after an update:
+Check KBS logs for attestation errors:
+oc logs -n trustee-operator-system -l app=kbs --tail=100 Look for messages like PCR mismatch or Attestation verification failed.
+Verify PCR measurements are loaded into Vault and synced to the cluster:
+# Check Vault has the measurements oc exec -n vault vault-0 -- vault kv get secret/hub/pcrMeasurements # Check the External Secret synced to the namespace oc get secret -n trustee-operator-system attestation-policy -o yaml Compare expected vs actual PCR values: The KBS logs show the PCR values presented by the peer-pod. Compare these against the expected values in ~/.coco-pattern/measurements.json. If they differ, re-run scripts/get-pcr.sh to ensure you extracted measurements from the correct image version.
+Confirm peer-pod image version: Verify the peer-pod is using the expected image:
+# Check the peer-pod configmap oc get configmap peer-pods-cm -n openshift-sandboxed-containers-operator -o yaml | grep podvm-image If the PCR values still do not match after following these steps, the peer-pod VM image may have been modified outside the standard upgrade process, or hyperthreading/firmware settings may differ from the image used during PCR extraction.
+Simple Confidential container tests The pattern deploys some simple tests of CoCo with this pattern. A &#34;Hello Openshift&#34; (for example, curl to return &#34;Hello Openshift!&#34;) application has been deployed in three configurations:
+A vanilla kubernetes pod: oc get pods -n hello-openshift standard
+A confidential container with a strict policy: oc get pods -n hello-openshift secure
+A confidential container with a relaxed policy: oc get pods -n hello-openshift insecure-policy
+In this case the insecure policy is designed to allow a user to be able to exec into the confidential container. Typically this is disabled by an immutable policy established at pod creation time.
+Running oc get pod -n hello-openshift secure -o yaml for either of the pods running a confidential container shows:
+Azure deployments: runtimeClassName: kata-remote (peer-pod provisioned on Azure hypervisor)
+Bare metal deployments: runtimeClassName: kata-cc (Kata container running on TDX/SEV-SNP hardware)
+Bare metal GPU deployments: runtimeClassName: kata-cc-nvidia-gpu (GPU-enabled Kata container)
+Azure-specific verification: Logging into the Azure portal after the pods have been provisioned shows that each confidential pod has its own Standard_DC2as_v5 virtual machine. These VMs are visible under the cluster’s resource group.
+oc exec testing In an OpenShift cluster without confidential containers, Role Based Access Control (RBAC) may be used to prevent users from using oc exec to access a container to mutate it. However:
+Cluster admins can always circumvent this capability
+Anyone logged into the node directly can also circumvent this capability
+Confidential containers enforce this boundary at the hardware level, independent of RBAC. Running oc exec -n hello-openshift -it secure — bash results in a denial of access, irrespective of the user undertaking the action, including kubeadmin. The policy is baked into the pod at creation time and cannot be modified at runtime.
+For comparison, oc exec -n hello-openshift -it standard — bash (the standard pod) and oc exec -n hello-openshift -it insecure-policy — bash (the CoCo pod with a relaxed policy) both allow shell access.
+Confidential Data Hub testing Part of the CoCo VM is a component called the Confidential Data Hub (CDH), which simplifies access to the Trustee Key Broker Service (KBS) for end applications. The CDH runs inside the confidential VM and handles attestation transparently. Applications simply make HTTP requests to a localhost endpoint.
+Find out more about how the CDH and Trustee work together here.
+The CDH presents to containers within the pod (only), through a localhost URL. The CoCo container with an insecure policy can be used for testing the behaviour, because it allows oc exec.
+oc exec -n hello-openshift -it insecure-policy — bash to get a shell into a confidential container
+The Trustee configuration specifies the list of secrets that the KBS can access with the kbsSecretResources attribute. These are mapped to Vault paths (for example, secret/data/hub/kbsres1).
+Secrets within the CDH can be accessed (by default) at http://127.0.0.1:8006/cdh/resource/default/$K8S_SECRET/$K8S_SECRET_KEY.
+In this case http://127.0.0.1:8006/cdh/resource/default/passphrase/passphrase by default returns a string that was randomly generated when the pattern was deployed.
+To verify, compare the CDH output against the Vault-backed secret: oc get secrets -n trustee-operator-system passphrase -o yaml | yq &#39;.data.passphrase&#39; | base64 -d. The values match.
+Tailing the logs for the KBS container (for example, oc logs -n trustee-operator-system -l app=kbs -f) shows the attestation evidence flowing from the CDH to the KBS, including TEE evidence validation.
+kbs-access application The kbs-access application is a web service deployed in the kbs-access namespace. It retrieves secrets from Trustee through the CDH and presents them in a web interface. This provides a convenient way to verify that the full attestation pipeline is working end-to-end without needing to exec into a pod.
+Access the application by using its OpenShift route: oc get route -n kbs-access.
+`,url:"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-getting-started/",breadcrumb:"/patterns/coco-pattern/coco-pattern-getting-started/"},"https://validatedpatterns.io/patterns/trilio-continuous-recovery/getting-started/":{title:"Getting started",tags:[],content:`Deploying the pattern Deployment 1. Clone the repository git clone https://github.com/trilio-demo/trilio-continuous-restore cd trilio-continuous-restore 2. Configure S3 bucket details Edit values-hub.yaml and values-secondary.yaml to set your S3 bucket name and region:
 # In both values-hub.yaml and values-secondary.yaml, under the trilio-operand app overrides: overrides: - name: backupTarget.bucketName value: &lt;your-bucket-name&gt; - name: backupTarget.region value: &lt;your-bucket-region&gt; # for example, us-east-1 3. Populate secrets Create values-secret.yaml from the template:
 cp values-secret.yaml.template ~/values-secret-trilio-continuous-restore.yaml Edit ~/values-secret-trilio-continuous-restore.yaml and fill in your credentials:
 secrets: - name: trilio-license vaultPrefixes: - global fields: - name: key value: &lt;your-trilio-license-key&gt; # single unbroken line, no escape characters - name: trilio-s3 vaultPrefixes: - global fields: - name: accessKey value: &lt;your-s3-access-key&gt; - name: secretKey value: &lt;your-s3-secret-key&gt; Always update secrets in your home directory, never in the repo&rsquo;s values-secret.yaml.template so that secrets are never committed to git.
@@ -3081,7 +3068,7 @@ ESO
 Supports a range of secret providers, ensuring no vendor lock-in.
 Keeps secrets out of version-controlled repositories, using token references in Git instead.
 Allows teams to manage secrets securely while maintaining efficient Git workflows.
-As of November 15, 2024, ESO is not officially supported by Red Hat as a product.
+As of November 11, 2025, ESO is officially supported by Red Hat as the External Secrets Operator for OpenShift. The Validated Patterns initiative provides a chart to configure the supported version, which is available via the Red Hat Ecosystem Catalog.
 ESO’s custom file format and utilities streamlines secret management by allowing file references and supporting encrypted secret storage. The design prioritizes security through multi-layer encryption and simplifies key management. In particular the ini key type is especially helpful for handling AWS credentials, where mismanagement could lead to unauthorized use and potential financial or operational issues.
 Validated Patterns primary backend secret store is HashiCorp Vault. HashiCorp Vault acts as a centralized service for securely managing secrets, such as passwords, API keys, and certificates.
 Unlike other secret management systems tied to specific cloud providers for example AWS Secrets Manager or Azure Key Vault, Vault can be deployed across different clouds, on bare-metal systems, and in hybrid environments. This cross-platform support made it a popular and practical choice for maintaining a consistent secrets management strategy.
@@ -3107,7 +3094,7 @@ Navigate to the charts/all/config-demo/templates directory in your repository:
 $ cd charts/all/config-demo/templates Create a new YAML file named mysecret-external-secret.yaml:
 $ vi mysecret-external-secret.yaml Open the file in your preferred text editor:
 $ vi mysecret-external-secret.yaml Add the following content to define a new external secret using the format of the existing template:
---- apiVersion: &#34;external-secrets.io/v1beta1&#34; kind: ExternalSecret metadata: name: config-demo-mysecret (1) namespace: config-demo spec: refreshInterval: 15s (2) secretStoreRef: (3) name: {{ .Values.secretStore.name }} kind: {{ .Values.secretStore.kind }} target: name: config-demo-mysecret template: type: Opaque dataFrom: (4) - extract: key: {{ .Values.configdemomysecret.key }} 1 Specifies the name of the new secret to be created in the config-demo namespace. 2 Sets how frequently the external secret is refreshed. 3 References the Vault or secret store as defined in the Helm values. 4 Uses extract to source all key-value pairs from the specified key in the Vault. Edit the chart’s values.yaml file to reflect this new external secret:
+--- apiVersion: &#34;external-secrets.io/v1&#34; kind: ExternalSecret metadata: name: config-demo-mysecret (1) namespace: config-demo spec: refreshInterval: 15s (2) secretStoreRef: (3) name: {{ .Values.secretStore.name }} kind: {{ .Values.secretStore.kind }} target: name: config-demo-mysecret template: type: Opaque dataFrom: (4) - extract: key: {{ .Values.configdemomysecret.key }} 1 Specifies the name of the new secret to be created in the config-demo namespace. 2 Sets how frequently the external secret is refreshed. 3 References the Vault or secret store as defined in the Helm values. 4 Uses extract to source all key-value pairs from the specified key in the Vault. Edit the chart’s values.yaml file to reflect this new external secret:
 $ vi ~/multicloud-gitops/charts/all/config-demo/values.yaml Add the following content:
 configdemomysecret: key: secret/data/global/config-demo Add the new file to git:
 $ git add . Commit your changes:
@@ -3619,7 +3606,17 @@ Node type Number of nodes CPU Memory Storage Control Planes + Workers
 2x 5th Generation Intel Xeon Platinum 8568Y+ (48 cores at 2.3 GHz base with Intel SGX)
 512 GB (16x32GB DDR5 5600)
 4x 3.84TB U.2 NVMe PCIe Gen4
-`,url:"https://validatedpatterns.io/patterns/multicloud-gitops-sgx/mcg-sgx-cluster-sizing/",breadcrumb:"/patterns/multicloud-gitops-sgx/mcg-sgx-cluster-sizing/"},"https://validatedpatterns.io/patterns/ansible-edge-gitops-kasten/cluster-sizing/":{title:"Cluster Sizing",tags:[],content:`OpenShift Cluster Sizing for the Ansible Edge GitOps Pattern Tested Platforms The Ansible Edge GitOps pattern has been tested on AWS:
+`,url:"https://validatedpatterns.io/patterns/multicloud-gitops-sgx/mcg-sgx-cluster-sizing/",breadcrumb:"/patterns/multicloud-gitops-sgx/mcg-sgx-cluster-sizing/"},"https://validatedpatterns.io/patterns/rag-quickstart/cluster-sizing/":{title:"Cluster sizing",tags:[],content:` RAG AI Quickstart pattern hub/datacenter cluster size The RAG AI Quickstart pattern has been tested with a defined set of specifically tested configurations that represent the most common combinations that Red Hat OpenShift Container Platform customers are using or deploying for the x86_64 architecture.
+The datacenter hub OpenShift cluster uses the following the deployment configuration:
+Table 1. Hub cluster minimum requirements Cloud Provider Node Type Number of nodes Instance Type Amazon Web Services
+Control Plane
+3
+m5.xlarge
+Amazon Web Services
+Worker
+3
+m5.4xlarge
+`,url:"https://validatedpatterns.io/patterns/rag-quickstart/cluster-sizing/",breadcrumb:"/patterns/rag-quickstart/cluster-sizing/"},"https://validatedpatterns.io/patterns/ansible-edge-gitops-kasten/cluster-sizing/":{title:"Cluster Sizing",tags:[],content:`OpenShift Cluster Sizing for the Ansible Edge GitOps Pattern Tested Platforms The Ansible Edge GitOps pattern has been tested on AWS:
 Certified Cloud Providers 4.9 4.10 Amazon Web Services Tested The pattern is adaptable to running on bare metal/on-prem clusters but has not yet been tested there.
 General OpenShift Minimum Requirements OpenShift 4 has the following minimum requirements for sizing of nodes:
 Minimum 4 vCPU (additional are strongly recommended). Minimum 16 GB RAM (additional memory is strongly recommended, especially if etcd is colocated on Control Planes). Minimum 40 GB hard disk space for the file system containing /var/. Minimum 1 GB hard disk space for the file system containing /usr/local/bin/. There is one application that comprises the Ansible Edge GitOps pattern. In addition, the Ansible Edge GitOps pattern also includes the Advanced Cluster Management (ACM) supporting operator that is installed by OpenShift GitOps using ArgoCD.
@@ -3739,7 +3736,61 @@ The OpenShift cluster is made of 3 Nodes combining Control Plane/Workers for the
 The following table provides VM recommendations for different workloads.
 | General purpose | Workload optimized
 Cost-optimized Balanced Scale-out optimized Memory-optimized Compute-optimized Accelerator-optimized E2 N2, N2D, N1 T2D M2, M1 C2 A2 Day-to-day computing at a lower cost Balanced price/performance across a wide range of VM shapes Best performance/cost for scale-out workloads Ultra high-memory workloads Ultra high performance for compute-intensive workloads Optimized for high performance computing workloads For more information please refer to the GCP VM Size Page.
-`,url:"https://validatedpatterns.io/patterns/multicloud-gitops-portworx/cluster-sizing/",breadcrumb:"/patterns/multicloud-gitops-portworx/cluster-sizing/"},"https://validatedpatterns.io/patterns/trilio-continuous-recovery/cr-operations/":{title:"CR operations",tags:[],content:`Operations Monitoring DR status # Hub — all phases make dr-status # Spoke — ConsistentSet and restore status (run on spoke context) oc get configmap trilio-cr-status -n imperative -o yaml Automated DR lifecycle The imperative framework runs continuously on a 10-minute schedule with no manual intervention required. The full lifecycle from a standing start (hub up, spoke just joined) to a completed Continuous Restore typically completes within 30–45 minutes.
+`,url:"https://validatedpatterns.io/patterns/multicloud-gitops-portworx/cluster-sizing/",breadcrumb:"/patterns/multicloud-gitops-portworx/cluster-sizing/"},"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-tested-environments/":{title:"CoCo pattern tested environments",tags:[],content:`Tested environments Current version (5.*) Version 5 introduces Kyverno-based cc_init_data injection, bare metal support (Intel TDX, AMD SEV-SNP), and Technology Preview NVIDIA confidential GPU support (H100, H200, B100, B200).
+Supported components OpenShift Sandboxed Containers Operator 1.12
+Red Hat Build of Trustee 1.1
+OpenShift Container Platform 4.19.28+
+Kyverno 3.7.*
+cert-manager operator (stable-v1 channel)
+Red Hat Advanced Cluster Management (RHACM) (for multi-cluster topology)
+HashiCorp Vault (secrets management)
+Node Feature Discovery Operator (for bare metal)
+Intel Device Plugins Operator (for Intel TDX)
+NVIDIA GPU Operator v26.3.0+ (for GPU topology)
+Azure single cluster Tested on Azure with the simple clusterGroup using self-managed OpenShift 4.19.28+ provisioned by using openshift-install. In this topology all components, including Trustee, Vault, ACM, sandboxed containers operator, Kyverno, and sample workloads, are deployed on a single cluster.
+Worker nodes use Standard_D8s_v5 or larger. Peer-pod VMs for confidential containers default to Standard_DC2as_v5 from the Azure confidential computing VM family, but other Azure confidential VM families can be configured in values-global.yaml. Azure DNS is required for the cluster’s hosted zone.
+Important: Azure confidential VM availability varies by region. Before deploying, verify that your target region supports Standard_DCas_v5 VMs and that your subscription has sufficient quota. See the Azure requirements page for regional availability details.
+Azure multiple clusters Tested with trusted-hub + spoke clusterGroups on Azure, both using self-managed OpenShift 4.19.28+.
+trusted-hub: Vault, ACM, Trustee (KBS + attestation service), cert-manager, Kyverno. This cluster acts as the trust anchor and ACM hub.
+spoke: Sandboxed containers operator, Kyverno, peer-pod infrastructure, and sample workloads (hello-openshift, kbs-access). Imported into ACM with the clusterGroup=spoke label.
+The spoke cluster connects back to the hub Trustee instance for attestation and secret retrieval. Secrets are synchronized from the hub Vault to the spoke through the External Secrets operator.
+Bare metal single cluster (Intel TDX) Tested on Single Node OpenShift (SNO) with Intel TDX hardware using the baremetal clusterGroup. All components run on a single node.
+Hardware configuration: - Intel Xeon Sapphire Rapids processors (4th Gen) with TDX enabled in BIOS - HPP (HostPath Provisioner) for storage - NFD detects TDX capability and labels the node with intel.feature.node.kubernetes.io/tdx=true
+Deployed components: - Trustee, Vault, Kyverno, sandboxed containers operator, NFD, Intel DCAP (PCCS + QGS) - Sample workloads use runtimeClassName: kata-cc with the kata-tdx handler - PCCS connects to Intel PCS API for attestation collateral
+Note: Multi-node bare metal clusters are expected to work but have not been validated.
+Bare metal single cluster (AMD SEV-SNP) Tested on Single Node OpenShift (SNO) with AMD SEV-SNP hardware using the baremetal clusterGroup.
+Hardware configuration: - AMD EPYC Genoa processors with SEV-SNP enabled in BIOS - HPP (HostPath Provisioner) for storage - NFD detects SEV-SNP capability and labels the node with amd.feature.node.kubernetes.io/snp=true
+Deployed components: - Trustee, Vault, Kyverno, sandboxed containers operator, NFD - Sample workloads use runtimeClassName: kata-cc with the kata-snp handler - No PCCS required (AMD uses certificate chain-based attestation)
+Bare metal GPU single cluster (Technology Preview) Tested on Single Node OpenShift (SNO) with Intel TDX and NVIDIA confidential GPUs using the baremetal-gpu clusterGroup. This topology supports both Intel TDX and AMD SEV-SNP as the host TEE platform.
+Hardware configuration: - Intel Xeon Sapphire Rapids processors with TDX enabled in BIOS (tested) or AMD EPYC Milan/Genoa processors with SEV-SNP (expected to work) - NVIDIA confidential GPUs with confidential computing firmware (tested with H100; H200, B100, B200 supported) - IOMMU enabled for GPU passthrough - HPP (HostPath Provisioner) for storage
+Deployed components: - All components from bare metal Intel TDX or AMD SEV-SNP configuration - NVIDIA GPU Operator with CC Manager, VFIO manager, and Kata device plugin - GPU workload (gpu-vectoradd) uses runtimeClassName: kata-cc-nvidia-gpu - GPU attestation integrated with Trustee KBS
+Version history All pattern versions prior to v4 used Technology Preview (pre-GA) releases of Trustee.
+Pattern version Trustee OSC Min OCP Notes 5.* (current)
+1.1 (GA)
+1.12
+4.19.28+
+Kyverno-based cc_init_data injection. Bare metal support (Intel TDX, AMD SEV-SNP). NVIDIA confidential GPU support (Technology Preview: H100, H200, B100, B200).
+4.*
+1.0 (GA)
+1.11
+4.17+
+First GA release. Multi-cluster support. cert-manager replaces Let’s Encrypt.
+3.*
+0.4.* (Tech Preview)
+1.10.*
+4.16
+Single cluster only. Tested on Azure (self-managed and ARO).
+2.*
+0.3.* (Tech Preview)
+1.9.*
+4.16
+Single cluster only. Tested on Azure (self-managed and ARO).
+1.0.0
+0.2.0 (Tech Preview)
+1.8.1
+4.16
+Initial release. Single cluster only. Self-managed OpenShift on Azure.
+`,url:"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-tested-environments/",breadcrumb:"/patterns/coco-pattern/coco-pattern-tested-environments/"},"https://validatedpatterns.io/patterns/trilio-continuous-recovery/cr-operations/":{title:"CR operations",tags:[],content:`Operations Monitoring DR status # Hub — all phases make dr-status # Spoke — ConsistentSet and restore status (run on spoke context) oc get configmap trilio-cr-status -n imperative -o yaml Automated DR lifecycle The imperative framework runs continuously on a 10-minute schedule with no manual intervention required. The full lifecycle from a standing start (hub up, spoke just joined) to a completed Continuous Restore typically completes within 30–45 minutes.
 Hub job sequence:
 Job What it does Skips when trilio-enable-cr Creates CR BackupPlan + ContinuousRestore Policy CR BackupPlan already Available trilio-cr-backup Creates a backup against the CR BackupPlan Available CR backup exists trilio-backup Creates a standard backup Available backup exists trilio-restore-standard Restores to wordpress-restore on hub Completed restore exists trilio-e2e-status Writes status ConfigMap; fails until all phases pass — (always runs) Spoke job sequence (per DR cluster):
 Job What it does Skips when trilio-cr-status Validates ConsistentSet available; writes status ConfigMap — (always runs; fails until Available) trilio-cr-restore Restores from latest ConsistentSet to wordpress-restore Completed restore exists Manual backup To trigger a backup outside the automated schedule:
@@ -4418,7 +4469,7 @@ Solution This is most commonly caused by incomplete MachineConfig application or
 Check if nodes have finished rebooting after MachineConfig updates:
 oc get nodes oc get mcp Wait for all MachineConfigPools to show UPDATED=True and DEGRADED=False.
 Verify the KataConfig is ready:
-oc get kataconfig -n openshift-sandboxed-containers-operator The status should show InProgress: False and the RuntimeClasses should be created (kata-remote for Azure, kata-cc for bare metal).
+oc get kataconfig -n openshift-sandboxed-containers-operator Verify the status shows InProgress: False and the RuntimeClasses are created (kata-remote for Azure, kata-cc for bare metal).
 If the KataConfig is stuck, check the operator logs:
 oc logs -n openshift-sandboxed-containers-operator \\ -l name=openshift-sandboxed-containers-operator -f Problem ArgoCD applications not syncing or showing timeouts
 Solution Check application dependencies and sync order. Some applications depend on others being ready first.
@@ -4442,20 +4493,20 @@ oc logs -n openshift-sandboxed-containers-operator \\ -l name=openshift-sandboxe
 oc exec -n vault vault-0 -- vault kv get secret/hub/azure Ensure values-global.yaml has correct Azure networking values (clusterSubnet, clusterNSG, clusterResGroup).
 Problem oc exec denied unexpectedly into a confidential container
 Solution This is expected behavior for containers with strict policies. Verify which policy the pod is using.
-Check the pod’s initdata annotation:
+Check the pod initdata annotation:
 oc get pod &lt;pod-name&gt; -n &lt;namespace&gt; -o yaml | grep coco.io/initdata-configmap Pods using initdata ConfigMap have strict policies that deny exec. Pods using debug-initdata allow exec.
 The strict policy is a security feature, not a bug. To test CDH functionality interactively, use a pod with coco.io/initdata-configmap: debug-initdata (like the insecure-policy pod in hello-openshift).
 Problem CDH not returning secrets or attestation failures
 Solution Verify KBS TLS certificate propagation and attestation policy configuration.
 Check that initdata ConfigMaps exist and contain the KBS TLS certificate:
 oc get configmap -n &lt;workload-namespace&gt; initdata -o yaml | grep INITDATA If the ConfigMap is missing, check if Kyverno propagated it:
-oc get configmap -n imperative -l coco.io/type=initdata The source ConfigMap should exist in the imperative namespace. If missing, the init-data-gzipper job may have failed:
+oc get configmap -n imperative -l coco.io/type=initdata The source ConfigMap must exist in the imperative namespace. If missing, the init-data-gzipper job may have failed:
 oc logs -n imperative jobs/init-data-gzipper --tail=50 Check KBS logs for attestation errors:
 oc logs -n trustee-operator-system -l app=kbs -f Look for messages like Attestation verification failed or PCR mismatch.
 Kyverno-specific issues Problem cc_init_data annotation not injected into CoCo pods
 Solution Verify Kyverno is running and the CoCo pod has the required annotation trigger.
 Check Kyverno pods are healthy:
-oc get pods -n kyverno All Kyverno pods should be Running. If not, check logs:
+oc get pods -n kyverno All Kyverno pods must be Running. If not, check logs:
 oc logs -n kyverno -l app.kubernetes.io/component=admission-controller Verify the pod has the coco.io/initdata-configmap annotation:
 oc get pod &lt;pod-name&gt; -n &lt;namespace&gt; -o yaml | grep coco.io/initdata-configmap If missing, the deployment/pod template must include this annotation. Kyverno only injects cc_init_data if this annotation is present.
 Check if the Kyverno policy exists:
@@ -4471,16 +4522,16 @@ aa.toml (attestation agent config)
 cdh.toml (confidential data hub config)
 Check Kyverno policy reports for validation errors:
 oc get policyreport -A oc describe policyreport &lt;report-name&gt; -n &lt;namespace&gt; Problem CoCo pods not picking up new initdata after cert rotation or KBS TLS changes
-Solution Kyverno’s autogen is disabled by design to ensure rollout restarts pick up new initdata. You must manually restart deployments.
+Solution Kyverno autogen is disabled by design to ensure rollout restarts pick up new initdata. You must manually restart deployments.
 Rollout restart the deployment to pick up new initdata:
 oc rollout restart deployment/&lt;deployment-name&gt; -n &lt;namespace&gt; Verify the new CoCo pods have the updated cc_init_data annotation:
-oc get pod &lt;new-pod-name&gt; -n &lt;namespace&gt; -o yaml | \\ grep io.katacontainers.config.hypervisor.cc_init_data The annotation value should be a long base64-encoded string. If it matches the old value, the ConfigMap may not have been updated. Check the source ConfigMap in the imperative namespace.
+oc get pod &lt;new-pod-name&gt; -n &lt;namespace&gt; -o yaml | \\ grep io.katacontainers.config.hypervisor.cc_init_data The annotation value is a long base64-encoded string. If it matches the old value, the ConfigMap may not have been updated. Check the source ConfigMap in the imperative namespace.
 Bare metal issues Problem NFD not detecting TDX or SEV-SNP capabilities
 Solution Verify BIOS/firmware configuration and kernel module loading.
 For Intel TDX:
 Check if TDX is enabled in BIOS. Consult your hardware vendor’s documentation for TEE enablement.
 Verify the TDX kernel module is loaded:
-oc debug node/&lt;node-name&gt; -- chroot /host lsmod | grep tdx Expected output should include kvm_intel with TDX support.
+oc debug node/&lt;node-name&gt; -- chroot /host lsmod | grep tdx The expected output includes kvm_intel with TDX support.
 Check NFD worker logs:
 oc logs -n openshift-nfd -l app=nfd-worker For AMD SEV-SNP:
 Check if SEV-SNP is enabled in BIOS.
@@ -4491,12 +4542,12 @@ Solution Verify the Intel PCS API key is configured correctly in secrets.
 Check PCCS pod logs:
 oc logs -n intel-dcap deployment/pccs-deployment Look for authentication errors or missing API key messages.
 Verify the PCCS secret exists and contains the API key:
-oc get secret -n intel-dcap pccs-api-key -o yaml The secret should have PCCS_API_KEY field (base64 encoded).
+oc get secret -n intel-dcap pccs-api-key -o yaml The secret must have a PCCS_API_KEY field (base64 encoded).
 If the secret is missing or incorrect, update ~/values-secret-coco-pattern.yaml with your Intel PCS API key and re-run:
 ./pattern.sh make upgrade Problem QGS DaemonSet not scheduling (Intel TDX)
 Solution QGS requires nodes labeled with TDX capability. Verify NFD labeled the nodes correctly.
 Check node labels:
-oc get nodes --show-labels | grep tdx Nodes with TDX should have intel.feature.node.kubernetes.io/tdx=true.
+oc get nodes --show-labels | grep tdx Nodes with TDX have the label intel.feature.node.kubernetes.io/tdx=true.
 If labels are missing, NFD may not have detected TDX. See &#34;NFD not detecting TDX&#34; troubleshooting above.
 Check QGS DaemonSet status:
 oc get daemonset -n intel-dcap qgs-daemonset If DESIRED is 0, no nodes match the nodeSelector. If DESIRED &gt; 0 but READY is 0, check pod events:
@@ -4511,11 +4562,11 @@ Solution This is expected behavior. The pattern uses manual install plan approva
 List pending install plans:
 oc get installplan -n nvidia-gpu-operator Approve the install plan:
 oc patch installplan &lt;install-plan-name&gt; -n nvidia-gpu-operator \\ --type merge -p &#39;{&#34;spec&#34;:{&#34;approved&#34;:true}}&#39; Problem kata-cc-nvidia-gpu RuntimeClass missing
-Solution This is often a timing issue. The GPU reconciliation job should trigger RuntimeClass creation.
+Solution This is often a timing issue. The GPU reconciliation job triggers RuntimeClass creation.
 Check if the reconcile-kataconfig-gpu job has run:
 oc get jobs -n imperative reconcile-kataconfig-gpu Check job logs:
-oc logs -n imperative jobs/reconcile-kataconfig-gpu If the job hasn’t run, it may be waiting for GPU nodes to be labeled. Verify GPU Operator labeled the nodes:
-oc get nodes --show-labels | grep nvidia Nodes with GPUs should have nvidia.com/gpu.present=true.
+oc logs -n imperative jobs/reconcile-kataconfig-gpu If the job has not run, it may be waiting for GPU nodes to be labeled. Verify GPU Operator labeled the nodes:
+oc get nodes --show-labels | grep nvidia Nodes with GPUs have the label nvidia.com/gpu.present=true.
 Manually trigger KataConfig reconciliation:
 oc annotate kataconfig example-kataconfig \\ reconcile-trigger=&#34;$(date)&#34; --overwrite -n openshift-sandboxed-containers-operator Problem GPU workload stuck in Pending state
 Solution Verify IOMMU is enabled and GPUs are bound to VFIO driver.
@@ -4526,7 +4577,7 @@ oc debug node/&lt;node-name&gt; -- chroot /host cat /proc/cmdline | grep iommu E
 If missing, verify the MachineConfig applied:
 oc get mc | grep iommu Nodes must reboot for IOMMU kernel parameters to take effect.
 GPU not bound to VFIO: Check GPU driver binding:
-oc debug node/&lt;gpu-node&gt; -- chroot /host lspci -nnk -d 10de: GPUs should show Kernel driver in use: vfio-pci. If not, check VFIO manager logs:
+oc debug node/&lt;gpu-node&gt; -- chroot /host lspci -nnk -d 10de: GPUs show Kernel driver in use: vfio-pci. If not, check VFIO manager logs:
 oc logs -n nvidia-gpu-operator -l app=nvidia-vfio-manager Problem CC Manager not enabling confidential mode on GPU
 Solution Verify the GPU firmware supports confidential computing and CC Manager is configured correctly.
 Check GPU CC Manager logs:
@@ -4558,14 +4609,14 @@ oc logs -n trustee-operator-system -l app=kbs --tail=100 | grep -i &#34;cert\\|s
 Operational issues Problem Vault secrets not loaded after initial deployment
 Solution MCO-driven node reboots during initial pattern deployment can cause Vault secret loading to time out.
 Wait for all nodes to finish rebooting:
-oc get mcp All MachineConfigPools should show UPDATED=True and DEGRADED=False.
+oc get mcp All MachineConfigPools show UPDATED=True and DEGRADED=False.
 Re-trigger secret loading:
 ./pattern.sh make upgrade Verify Vault is unsealed and healthy:
 oc get pods -n vault oc exec -n vault vault-0 -- vault status If Vault is sealed, follow the Vault unsealing procedure documented in the Validated Patterns framework.
 Problem CoCo pods starting before cc_init_data annotations are ready
 Solution CoCo pods may start before Kyverno injects the cc_init_data annotations, causing attestation failures.
 Delete the pod to trigger recreation with correct annotations:
-oc delete pod &lt;pod-name&gt; -n &lt;namespace&gt; The deployment will recreate the pod, and Kyverno will inject the cc_init_data annotation during admission.
+oc delete pod &lt;pod-name&gt; -n &lt;namespace&gt; The deployment recreates the pod, and Kyverno injects the cc_init_data annotation during admission.
 Verify the new pod has the annotation:
 oc get pod &lt;new-pod-name&gt; -n &lt;namespace&gt; -o yaml | \\ grep io.katacontainers.config.hypervisor.cc_init_data Problem TDX attestation failures after cluster rebuild (SGX registration not reset)
 Solution Stale SGX registration state persists in BIOS/firmware after rebuilding a bare metal TDX cluster.
@@ -4574,7 +4625,7 @@ Common BIOS settings to check:
 SGX Factory Reset (enables clearing of previous registration)
 TDX enablement (must be re-enabled after SGX reset)
 TME (Total Memory Encryption) settings
-Without an SGX reset, the platform’s attestation evidence will not match expected values and Trustee will reject attestation requests.
+Without an SGX reset, the platform attestation evidence does not match expected values and Trustee rejects attestation requests.
 Problem Confidential containers failing due to TEE not enabled in BIOS
 Solution Verify that TDX or SEV-SNP is actually enabled at the BIOS/firmware level.
 For Intel TDX:
@@ -4585,7 +4636,7 @@ For AMD SEV-SNP:
 Check BIOS settings according to the AMD SEV developer documentation and your hardware vendor’s TEE enablement guide.
 Verify SEV-SNP is detected by the kernel:
 oc debug node/&lt;node-name&gt; -- chroot /host dmesg | grep -i sev Expected: Messages indicating SEV-SNP initialization succeeded.
-If TEE capabilities are not detected at the kernel level, Node Feature Discovery (NFD) will not label nodes, and confidential runtime classes will not be schedulable. Fix the BIOS configuration before proceeding with pattern deployment.
+If TEE capabilities are not detected at the kernel level, Node Feature Discovery (NFD) does not label nodes, and confidential runtime classes are not schedulable. Fix the BIOS configuration before proceeding with pattern deployment.
 `,url:"https://validatedpatterns.io/patterns/coco-pattern/coco-pattern-troubleshooting/",breadcrumb:"/patterns/coco-pattern/coco-pattern-troubleshooting/"},"https://validatedpatterns.io/patterns/gaudi-rag-chat-qna/gaudi-rag-chat-qna-troubleshooting/":{title:"Troubleshooting",tags:[],content:` Troubleshooting common Pattern Deployment issues Problem Validated Pattern installation process is stuck on deploying Vault
 Solution Most common reason of this is that prerequisites are not satisfied i.e. Image Registry is not set up or CephFs is not set as a default StorageClass. Please refer to section Getting started → Prerequisites and make sure all is done before proceeding to pattern deployment.
 Problem Downloading AI model Llama-2-70b-chat-hf using download-model Jupyter notebook is failing or TGI deployment fails after model is downloaded
@@ -5186,12 +5237,14 @@ Additionally, an optional clusterRoleYaml section is defined. By default, the im
 `,url:"https://validatedpatterns.io/learn/clustergroup-in-values-files/",breadcrumb:"/learn/clustergroup-in-values-files/"},"https://validatedpatterns.io/learn/private-repos/":{title:"Installing Patterns in Private Repos",tags:[],content:` Deploying patterns from private repositories You can deploy patterns from git repositories that are either password-protected or secured with an SSH key.
 Using an SSH key To deploy a pattern from an SSH-secured private repository, create a secret for repository access and then reference it in your pattern’s Custom Resource.
 Create a secret for repository access Generate a secret containing the credentials for accessing your repository. This secret should be formatted according to ArgoCD’s declarative setup guidelines.
-apiVersion: v1 kind: Secret metadata: name: private-repo namespace: openshift-operators labels: argocd.argoproj.io/secret-type: repository stringData: type: git url: git@github.com:mbaldessari/mcg-private.git sshPrivateKey: | -----BEGIN OPENSSH PRIVATE KEY----- a3... ... ... -----END OPENSSH PRIVATE KEY----- Deploy the pattern with the secret Reference the secret you created by passing TOKEN_SECRET and TOKEN_NAMESPACE to the install command:
+apiVersion: v1 kind: Secret metadata: name: private-repo namespace: openshift-operators labels: argocd.argoproj.io/secret-type: repository stringData: type: git url: git@github.com:mbaldessari/mcg-private.git sshPrivateKey: | -----BEGIN OPENSSH PRIVATE KEY----- a3... ... ... -----END OPENSSH PRIVATE KEY----- This secret can now be created with the bootstrap_secrets feature like so:
+version: &#34;2.0&#34; bootstrap_secrets: - name: private-repo targetNamespaces: - openshift-operators labels: argocd.argoproj.io/secret-type: repository fields: - name: type value: git - name: sshPrivateKey path: | -----BEGIN OPENSSH PRIVATE KEY----- a3... ... ... -----END OPENSSH PRIVATE KEY----- - name: url value: git@github.com:mbaldessari/mcg-private.git Deploy the pattern with the secret Reference the secret you created by passing TOKEN_SECRET and TOKEN_NAMESPACE to the install command:
 ./pattern.sh make TOKEN_SECRET=private-repo TOKEN_NAMESPACE=openshift-operators install This command assumes that the private-repo secret exists and that the origin remote of the repository points to git@github.com:mbaldessari/mcg-private.git as specified in the secret. The install sets the tokenSecret and tokenSecretNamespace fields on the pattern’s Custom Resource, which ensures that all Argo instances can access the private repository.
 If you need to create the pattern CR manually instead, set those fields directly:
 apiVersion: gitops.hybrid-cloud-patterns.io/v1alpha1 kind: Pattern metadata: name: pattern-sample namespace: patterns-operator spec: clusterGroupName: hub gitSpec: targetRepo: git@github.com:mbaldessari/mcg-private.git targetRevision: private-repo tokenSecret: private-repo tokenSecretNamespace: openshift-operators Using a GitLab private repository with a PAT First, make sure your PAT has at least Read and Download permissions for your private repository.
 As with the SSH example above, create a secret before running the install:
-apiVersion: v1 kind: Secret metadata: name: private-repo namespace: openshift-operators labels: argocd.argoproj.io/secret-type: repository stringData: type: git url: https://gitlab.com/dminnear-rh/mcg-private.git username: oauth2 password: glpat-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx The username must be oauth2, not your GitLab handle. Then reference the secret in the install:
+apiVersion: v1 kind: Secret metadata: name: private-repo namespace: openshift-operators labels: argocd.argoproj.io/secret-type: repository stringData: type: git url: https://gitlab.com/dminnear-rh/mcg-private.git username: oauth2 password: glpat-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Using the bootstrap_secrets feature, this can be created as follows:
+version: &#34;2.0&#34; bootstrap_secrets: - name: private-repo targetNamespaces: - openshift-operators labels: argocd.argoproj.io/secret-type: repository fields: - name: type value: git - name: url value: https://gitlab.com/dminnear-rh/mcg-private.git - name: username value: oauth2 - name: password value: glpat-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx The username must be oauth2, not your GitLab handle. Then reference the secret in the install:
 ./pattern.sh make TOKEN_SECRET=private-repo TOKEN_NAMESPACE=openshift-operators install `,url:"https://validatedpatterns.io/learn/private-repos/",breadcrumb:"/learn/private-repos/"},"https://validatedpatterns.io/contribute/test-artifacts/":{title:"Testing Artifacts",tags:[],content:`Testing artifacts To be represented in the CI dashboard, testers can create a publicly available JSON file (for example, in an AWS bucket) that records the result of the latest test for each combination of pattern, platform, and Red Hat OpenShift Container Platform version.
 File naming convention {pattern}-{platform}-{openshift version}-stable-badge.json
 Example: medicaldiag-nutanix-4.13-stable-badge.json
@@ -5739,8 +5792,121 @@ Who is behind this? Today, a team of Red Hat engineers including Andrew Beekhof 
 Excited or intrigued by what you see here? We’d love to hear your thoughts and ideas! Try the patterns contained here and see below for links to our repositories and issue trackers.
 How can I get involved? Try out what we’ve done and submit issues to our issue trackers.
 We will review pull requests to our pattern repositories.
-`,url:"https://validatedpatterns.io/learn/faq/",breadcrumb:"/learn/faq/"},"https://validatedpatterns.io/patterns/":{title:"Patterns",tags:[],content:`Browse through available patterns and their respective documentation for deployment and operation. Filter patterns by type, industry, and product.
-`,url:"https://validatedpatterns.io/patterns/",breadcrumb:"/patterns/"},"https://validatedpatterns.io/patterns/portworx-dr/":{title:"Portworx DR",tags:[],content:` Portworx Disaster Recovery This pattern demonstrates the use of Ansible Automation Platform to orchestrate Portworx Disaster Recovery on AWS with a simple example application (boutique).
+`,url:"https://validatedpatterns.io/learn/faq/",breadcrumb:"/learn/faq/"},"https://validatedpatterns.io/patterns/":{title:"Patterns",tags:[],content:`Browse through available patterns and their respective documentation for deployment and operation. Filter patterns by tier, focus area, industry, and product.
+`,url:"https://validatedpatterns.io/patterns/",breadcrumb:"/patterns/"},"https://validatedpatterns.io/patterns/rag-quickstart/":{title:"RAG AI Quickstart",tags:[],content:` About the RAG Quickstart pattern Use retrieval-augmented generation (RAG) to enhance large language models with specialized data sources for more accurate and context-aware responses.
+Use case Deploy a RAG-powered chatbot that connects users to internal documentation through a single chat interface.
+Explore retrieval-augmented generation capabilities including document ingestion, custom system prompts, and agent-based RAG.
+Use a GitOps approach to provision AI infrastructure including LLM serving, vector storage, and safety guardrails.
+Based on the requirements of a specific implementation, certain details might differ. However, all Validated Patterns that are based on a portfolio architecture, generalize one or more successful deployments of a use case.
+Background This pattern is scaffolding around the RAG AI Quickstart. It provisions the OpenShift cluster with Red Hat OpenShift AI in a configuration suitable for LlamaStack. It deploys NFD and the NVIDIA GPU Operator for LLM inference on GPU nodes and manages secrets through the Validated Patterns framework. On AWS, GPU worker nodes can be provisioned automatically. By default, this pattern uses a CPU-based LLM.
+Retrieval-Augmented Generation (RAG) enhances Large Language Models (LLMs) by retrieving relevant external knowledge to improve accuracy, reduce hallucinations, and support domain-specific conversations.
+The included demo application features FantaCo, a fictional large enterprise that launched a secure RAG chatbot connecting employees to HR, procurement, sales, and IT documentation. Users can explore the capabilities of RAG by:
+Exploring FantaCo’s solution
+Uploading new documents to be embedded
+Tweaking sampling parameters to influence LLM responses
+Using custom system prompts
+Switching between simple and agent-based RAG
+About the solution This pattern deploys a complete RAG pipeline on a single OpenShift cluster by using a GitOps approach. The Validated Patterns framework handles infrastructure provisioning, including GPU operators, AI platform configuration, and secrets management. The RAG AI Quickstart delivers the application layer: document ingestion, embedding, retrieval, and LLM-powered chat.
+The solution uses LlamaStack to standardize the building blocks of the AI stack with a consistent interface for model serving, vector storage, and safety guardrails. Kubeflow Pipelines ingests documents, embeds them, and stores them in PostgreSQL with PGVector. At query time, the system retrieves relevant embeddings to ground LLM responses in real data.
+About the technology The following technologies are used in this solution:
+Red Hat OpenShift Container Platform An enterprise-ready Kubernetes container platform built for an open hybrid cloud strategy. It provides a consistent application platform to manage hybrid cloud, public cloud, and edge deployments.
+Red Hat OpenShift GitOps A declarative application continuous delivery tool for Kubernetes based on the ArgoCD project. Application definitions, configurations, and environments are declarative and version controlled in Git.
+Red Hat OpenShift AI A flexible, scalable MLOps platform with tools to build, deploy, and manage AI-enabled applications. This pattern uses Red Hat OpenShift AI to serve the LLM inference endpoint.
+LlamaStack A standardized framework for building AI applications with Llama models. It provides consistent APIs for model inference, vector storage, safety guardrails, and agentic workflows.
+PostgreSQL with PGVector An open source relational database extended with PGVector for storing and querying vector embeddings used in document retrieval.
+all-MiniLM-L6-v2 A sentence transformer model used to generate vector embeddings from documents and queries for similarity search.
+Llama 3.2-3B-Instruct The default large language model used for generating responses. The pattern also supports Llama 3.1-8B and Llama 3.3-70B-Instruct on GPU-equipped clusters.
+Llama Guard 3 A safety model that provides content filtering and guardrails to block harmful requests and responses.
+Kubeflow Pipelines A platform for building and deploying ML workflows. This pattern uses Kubeflow Pipelines for document ingestion and embedding.
+Streamlit An open source Python framework used to build the RAG chatbot user interface.
+RAG Quickstart architecture The following figure provides a high-level overview of the RAG Quickstart architecture.
+Figure 1. RAG system architecture The architecture consists of two main pipelines:
+RAG Pipeline — Handles user queries and generates responses through LlamaStack APIs, with safety guardrails, model serving, and vector retrieval.
+Ingestion Pipeline — Processes documents from multiple sources, generates embeddings, and stores them in the vector database.
+RAG pipeline The RAG pipeline processes user queries through the following components:
+Frontend UI Provides the user interface for submitting queries and viewing responses. The Streamlit-based UI communicates with the LlamaStack APIs by using REST.
+LlamaStack APIs The central orchestration layer that routes queries to the appropriate backend services. LlamaStack provides a standardized interface for model inference, vector retrieval, tool use, and safety guardrails.
+Guard Rails Screens both incoming queries and outgoing responses for harmful content using Llama Guard. Llama Guard checks incoming queries for prompt injection, manipulative content, and inappropriate requests. It also validates generated responses for harmful content and compliance before returning them to the user.
+Model Servers Serve the LLM for response generation. The pattern supports multiple serving backends including vLLM on Red Hat OpenShift AI, and Ollama for CPU-based deployments. The default model is meta-llama/Llama-3.2-3B-Instruct.
+Vector DBs Store document embeddings in PostgreSQL with PGVector. When a query arrives, the retriever converts it to a vector embedding and performs a similarity search to find relevant document chunks, which are passed as context to the LLM.
+Tools Provide agent-based capabilities for more complex workflows. When agent-based RAG is enabled, LlamaStack can invoke tools to perform multi-step reasoning and retrieval.
+Ingestion pipeline The ingestion pipeline processes documents and updates the knowledge base. Documents can be ingested from three sources:
+S3 Bucket Documents stored in S3-compatible object storage (MinIO) are processed through OpenShift AI Pipelines (Kubeflow) for batch ingestion.
+URL The system downloads documents from web URLs and processes them through a Python script for embedding.
+Uploads Users can upload documents directly through the frontend UI or retriever listener for on-demand ingestion.
+All ingestion paths feed into the Retriever and Embedding Service, which uses Docling libraries to chunk documents into appropriate segments and the all-MiniLM-L6-v2 model to generate vector embeddings. The resulting embeddings are stored in PGVector for retrieval.
+Deployment architecture The following table describes the pod structure when deployed on OpenShift:
+Pod Purpose Key characteristics Frontend
+User interface
+Streamlit-based UI, communicates with LlamaStack APIs by using REST
+LlamaStack
+RAG orchestration
+Central application logic, routes queries to model servers, vector DBs, guard rails, and tools
+LLM Service
+Language model inference
+Runs vLLM with Llama models, optimized for GPU utilization, deployed by using KServe InferenceService on Red Hat OpenShift AI
+Guard Rails
+Content moderation
+Runs Llama Guard for input and output safety screening, can be independently scaled
+Vector Database
+Embedding storage and search
+PostgreSQL with PGVector, requires persistent storage, deployed as StatefulSet
+Embedding Service
+Vector embeddings
+Generates embeddings for documents and queries using all-MiniLM-L6-v2
+Ingestion Pipeline
+Document processing
+Kubeflow Pipelines workflows, uses Docling for document chunking, connected to S3-compatible storage (MinIO)
+Implementation technologies Component Technology Application Framework
+LlamaStack
+LLM Service
+vLLM with meta-llama/Llama-3.2-3B-Instruct
+Vector Database
+PostgreSQL + PGVector
+Container Orchestration
+Red Hat OpenShift Container Platform + Red Hat OpenShift AI
+Safety Models
+meta-llama/Llama-Guard-3-1B
+Embedding Model
+all-MiniLM-L6-v2
+Document Processing
+Docling
+Pipeline Orchestration
+Kubeflow Pipelines
+Object Storage
+MinIO (S3-compatible)
+Frontend
+Streamlit
+Next steps Install this pattern.
+`,url:"https://validatedpatterns.io/patterns/rag-quickstart/",breadcrumb:"/patterns/rag-quickstart/"},"https://validatedpatterns.io/":{title:"Validated Patterns",tags:[],content:`
+Deploy complex solutions with unprecedented speed and confidence. Go beyond traditional reference architectures. Validated Patterns deliver automated, rigorously tested application stacks for your hybrid cloud, powered by GitOps.
+`,url:"https://validatedpatterns.io/",breadcrumb:"/"},"https://validatedpatterns.io/blog/":{title:"Blog",tags:[],content:`Find out the latest news about Validated Patterns.
+`,url:"https://validatedpatterns.io/blog/",breadcrumb:"/blog/"},"https://validatedpatterns.io/blog/2026-05-12-introducing-bootstrap-secrets/":{title:'Introducing "Bootstrap" Secrets',tags:[],content:` Preamble We have recognized secrets as one of the challenges of GitOps since the beginning of the Validated Patterns initiative. As a consequence, we have put thought and effort into making the secrets management process with Validated Patterns as easy as we can, while still modeling good security practices.
+One challenge that we have not fully addressed, though, is the occasional need to inject secrets into a cluster in order to enable basic cluster functionality. One example of when this might happen is when a cluster is attached to an enterprise storage array which requires secrets to be present to access the storage. Another good example is when the pattern itself is in a credential-protected repository, such that ArgoCD, the OpenShift GitOps Operator, needs credentials to be able to render the pattern. Previously, users had to use their own mechanisms to inject secrets into the cluster, and the Validated Patterns framework did not help with this.
+With this blog post, we are happy to announce that the Validated Patterns framework now has a mechanism to help with this problem, which requires minimal effort to use and offers some convenience mechanisms, including all of the convenience functions (like path and ini_file parsing) that the Patterns secret loading system already uses. Additionally, it works within the existing Validated Patterns workflow.
+What are &#34;bootstrap&#34; secrets? The &#34;bootstrap&#34; secrets process is somewhat exceptional. The vast majority of secrets in Validated Patterns usage are ordinary. But what if you need to do authentication to start installing your pattern? Specific examples are when you are using an authenticated private repository to hold the pattern itself, as well as any secrets you might need to create a default storageclass. In such a case, these secrets must be injected before the pattern object itself is created, and since it contains the list of namespaces to create, the early phase secrets have a &#34;chicken-and-egg&#34; problem. Previous instructions have provided for the manual creation of these objects, but this can be tedious and error prone.
+Bootstrap secrets are injected immediately after the initial cluster validations in the ordinary installation flow. They are allowed to create their own namespaces, but to help with idempotence, they check to see if the namespace exists first, and only create if it is missing.
+How to use bootstrap secrets The Validated Patterns secrets v2.0 file format adds a new section, boostrap_secrets. These secrets, and these only, will be considered in the &#34;early&#34; secrets installation phase. The early secrets installation phase happens just prior to the Patterns Operator and CR creation. This is because the pattern CR needs to be able to clone the repository in order to work. A secret that is linked to the Pattern CR will automatically be copied to Patterns-managed Argo instances.
+Bootstrap secrets have some special properties:
+They are always injected using the &#34;none&#34; injector.
+They are allowed to create targetNamespaces if they do not already exist. (They check before creating them, to avoid overwriting existing namespaces with annotations.)
+Bootstrap secrets loading is always attempted if the section is present, even if the global secrets loading feature is disabled via global.secretsLoader.disabled being set to true.
+Additionally, bootstrap secrets are checked and loaded during a make load-secrets run.
+Kubernetes-specific secret injector features While it has long been possible, it has not been well documented (or advertized) that Validated Patterns can inject secrets directly into kubernetes. The currently available injectors that use kubernetes secret injection are kubernetes and none. (They were named based on the External Secrets backend they are intended to support.) Some additional conveniences are available in values-secret files for kubernetes secret injection, including:
+targetNamespaces: The same secret can be injected into multiple namespaces. This is useful, for example, when you have to inject the same ArgoCD secret into two or more different namespaces. The loader treats each secret/namespace as a separate item for injection. Of course a list containing one item is always acceptable as well. The loader will attempt to create a minimal namespace if it does not already exist, but only during the early (boostrap) secrets loading phase.
+Labels and annotations: You can add arbitrary labels and/or annotations to your secret objects.
+type: Some secret types benefit from having type associated with them. The secret loader defaults to Opaque when no type is specified, but will honor a type that is specified.
+Example Bootstrap Secret file Given following file, ~/values-secret.yaml:
+--- version: &#34;2.0&#34; bootstrap_secrets: - name: test-secret annotations: validatedpatterns.io/example: foo labels: validatedpatterns.io/injected-secrets: &#34;true&#34; targetNamespaces: - default - vp-gitops type: kubernetes.io/basic fields: - name: username value: user - name: password value: password secrets: # ... # As before The loader would generate and inject the following two objects:
+apiVersion: v1 data: password: cGFzc3dvcmQ= username: dXNlcg== kind: Secret metadata: annotations: validatedpatterns.io/example: foo creationTimestamp: &#34;2026-05-12T16:47:15Z&#34; labels: validatedpatterns.io/injected-secrets: &#34;true&#34; name: test-secret namespace: default resourceVersion: &#34;158877&#34; uid: be74939e-6acc-41e8-96f3-0439f9e2e0af type: kubernetes.io/basic and
+apiVersion: v1 data: password: cGFzc3dvcmQ= username: dXNlcg== kind: Secret metadata: annotations: validatedpatterns.io/example: foo creationTimestamp: &#34;2026-05-12T16:48:02Z&#34; labels: validatedpatterns.io/injected-secrets: &#34;true&#34; name: test-secret namespace: vp-gitops resourceVersion: &#34;158893&#34; uid: 311ba451-da6d-427b-8e0f-1293ef7b18a4 type: kubernetes.io/basic Private Git Repositories - a Practical Use of this feature The primary use of this feature is to enable the use of private repositories to hold Validated Patterns. These repositories need authentication. The patterns framework has included support for private repositories for some time, but this feature introduces the ability to inject the secret necessary to run those patterns without extra manual steps.
+Given the following repository definition in values-global.yaml:
+--- global: pattern: private-pattern-test options: useCSV: false syncPolicy: Automatic installPlanApproval: Automatic main: git: repoURL: git@github.com:mhjacks/private-pattern-test.git revision: main tokenSecret: private-repo tokenSecretNamespace: patterns-operator clusterGroupName: hub multiSourceConfig: enabled: true clusterGroupChartVersion: &#34;0.9.*&#34; The following secret file configuration will inject the private-repo secret needed into the patterns-operator namespace (creating it if it does not already exist, which at the time it is normally installed, it will not):
+--- version: &#34;2.0&#34; bootstrap_secrets: - name: private-repo targetNamespaces: - patterns-operator labels: argocd.argoproj.io/secret-type: repository fields: - name: type value: git - name: sshPrivateKey path: ~/.ssh/id_ed25519 - name: url value: git@github.com:mhjacks/private-pattern-test.git Technical Details of the change The &#34;bootstrap&#34; loading process ignores the values-global secrets backend setting during the bootstrap phase, forcing the use of the &#34;none&#34; provider instead, which will use the kubernetes secrets injection roles with special flags enabled. It searches the discovered secrets file for the bootstrap secrets section, loading them as described above. This step runs between cluster validation and pattern operator and object creation. The regular secrets injection happens after pattern creation, as before. It is also possible to force bootstrap secret loading via ./pattern.sh ansible-playbook rhvp.cluster_utils.load_bootstrap_secrets, but this is normally not necessary as it is integrated into the typical make install process, as well as the make load-secrets process.
+The benefit to this approach is that all existing patterns can make use of this feature without changing their Makefiles. Patterns without the bootstrap secrets section will skip bootstrap secrets loading as they will have no bootstrap secrets to load.
+For each kubernetes secret that is generated, the loader will check for the namespace, and create a minimal namespace if it does not already exist, and then create the secret.
+Summary This change improves the Validated Patterns experience with secrets, streamlining the process of installing private patterns. Additional cases, like injecting secrets for CSI drivers, is also possible using this new mechanism.
+`,url:"https://validatedpatterns.io/blog/2026-05-12-introducing-bootstrap-secrets/",breadcrumb:"/blog/2026-05-12-introducing-bootstrap-secrets/"},"https://validatedpatterns.io/patterns/portworx-dr/":{title:"Portworx DR",tags:[],content:` Portworx Disaster Recovery This pattern demonstrates the use of Ansible Automation Platform to orchestrate Portworx Disaster Recovery on AWS with a simple example application (boutique).
 Background Not all applications have integrated regional failover strategies. Users who need regional disaster recovery capabilities must solve this problem for the applications that cannot solve it for themselves.
 Red Hat technologies Red Hat OpenShift Container Platform (Kubernetes)
 Red Hat Ansible Automation Platform
@@ -5750,11 +5916,8 @@ Red Hat External Secrets Operator
 Other technologies this pattern uses HashiCorp Vault (Community Edition)
 Portworx Enterprise
 Architecture Coming soon
-`,url:"https://validatedpatterns.io/patterns/portworx-dr/",breadcrumb:"/patterns/portworx-dr/"},"https://validatedpatterns.io/":{title:"Validated Patterns",tags:[],content:`
-Deploy complex solutions with unprecedented speed and confidence. Go beyond traditional reference architectures. Validated Patterns deliver automated, rigorously tested application stacks for your hybrid cloud, powered by GitOps.
-`,url:"https://validatedpatterns.io/",breadcrumb:"/"},"https://validatedpatterns.io/patterns/netapp-dr-starter-kit/":{title:"NetApp DR Starter Kit",tags:[],content:`NetApp DR Starter Kit This pattern is under contstruction and the docs will be added soon! This pattern is currently in the sandbox tier, which means it is a work in progress and may not be fully tested or documented. We welcome contributions and feedback to help improve this pattern and move it to higher tiers.
-`,url:"https://validatedpatterns.io/patterns/netapp-dr-starter-kit/",breadcrumb:"/patterns/netapp-dr-starter-kit/"},"https://validatedpatterns.io/blog/":{title:"Blog",tags:[],content:`Find out the latest news about Validated Patterns.
-`,url:"https://validatedpatterns.io/blog/",breadcrumb:"/blog/"},"https://validatedpatterns.io/blog/2026-04-13-own-argocd-instance/":{title:"Validated Patterns now deploys its own ArgoCD instance",tags:[],content:` Preamble Until now the Validated Patterns operator relied on the default ArgoCD instance created by the OpenShift GitOps operator in the openshift-gitops namespace. While this worked, it meant that the patterns framework shared its ArgoCD instance with whatever else the cluster administrator or the gitops operator itself might configure there. Starting with the 0.0.70 version of the patterns operator, new deployments will get their own dedicated ArgoCD instance running in a brand-new vp-gitops namespace.
+`,url:"https://validatedpatterns.io/patterns/portworx-dr/",breadcrumb:"/patterns/portworx-dr/"},"https://validatedpatterns.io/patterns/netapp-dr-starter-kit/":{title:"NetApp DR Starter Kit",tags:[],content:`NetApp DR Starter Kit This pattern is under contstruction and the docs will be added soon! This pattern is currently in the sandbox tier, which means it is a work in progress and may not be fully tested or documented. We welcome contributions and feedback to help improve this pattern and move it to higher tiers.
+`,url:"https://validatedpatterns.io/patterns/netapp-dr-starter-kit/",breadcrumb:"/patterns/netapp-dr-starter-kit/"},"https://validatedpatterns.io/blog/2026-04-13-own-argocd-instance/":{title:"Validated Patterns now deploys its own ArgoCD instance",tags:[],content:` Preamble Until now the Validated Patterns operator relied on the default ArgoCD instance created by the OpenShift GitOps operator in the openshift-gitops namespace. While this worked, it meant that the patterns framework shared its ArgoCD instance with whatever else the cluster administrator or the gitops operator itself might configure there. Starting with the 0.0.70 version of the patterns operator, new deployments will get their own dedicated ArgoCD instance running in a brand-new vp-gitops namespace.
 Why the change Sharing the default openshift-gitops ArgoCD instance had a few drawbacks:
 Potential conflicts Any other workload or operator that also relied on the default ArgoCD instance could interfere with the patterns deployment, and vice versa.
 Lifecycle coupling Upgrades or configuration changes to the gitops-operator’s default instance could unexpectedly affect a running pattern.
@@ -6585,17 +6748,17 @@ values-global.yaml:
 main: multiSourceConfig: enabled: true clusterGroupChartVersion: &#34;0.9.*&#34; helmRepoUrl: registry.internal.disconnected.net/hybridcloudpatterns patternsOperator: source: cs-community-operator-index-v4-16 gitops: operatorSource: cs-redhat-operator-index-v4-16 values-hub.yaml:
 acm: mce_operator: source: cs-redhat-operator-index-v4-16 clusterGroup: subscriptions: acm: name: advanced-cluster-management namespace: open-cluster-management channel: release-2.11 source: cs-redhat-operator-index-v4-16 Deploy the pattern At this point we can clone Multicloud Gitops on to a VM that lives in the disconnected network and deploy the pattern. The only thing we need to do first is to point the installation script to the mirrored helm chart inside the disconnected registry.
 # Points to the mirrored VP install chart export PATTERN_DISCONNECTED_HOME=registry.internal.disconnected.net/hybridcloudpatterns ./pattern.sh make install After a while the cluster will converge to its desired final state and the MultiCloud Gitops pattern will be installed successfully.
-`,url:"https://validatedpatterns.io/blog/2024-10-12-disconnected/",breadcrumb:"/blog/2024-10-12-disconnected/"},"https://validatedpatterns.io/patterns/coco-pattern/":{title:"Confidential Containers pattern",tags:[],content:`About the Confidential Containers pattern Confidential computing is a technology for securing data in use. It uses a Trusted Execution Environment (TEE) provided within the hardware of the processor to prevent access from others who have access to the system, including cluster administrators and hypervisor operators. Confidential containers is a project to standardize the consumption of confidential computing by making the security boundary for confidential computing a Kubernetes pod. Kata containers is used to establish the boundary via a shim VM.
+`,url:"https://validatedpatterns.io/blog/2024-10-12-disconnected/",breadcrumb:"/blog/2024-10-12-disconnected/"},"https://validatedpatterns.io/patterns/coco-pattern/":{title:"Confidential Containers pattern",tags:[],content:`About the Confidential Containers pattern Confidential computing is a technology for securing data in use. It uses a Trusted Execution Environment (TEE) provided within the hardware of the processor to prevent access from others who have access to the system, including cluster administrators and hypervisor operators. Confidential containers is a project to standardize the consumption of confidential computing by making the security boundary for confidential computing a Kubernetes pod. Kata containers is used to establish the boundary through a shim VM.
 A core goal of confidential computing is to use this technology to isolate the workload from both Kubernetes and hypervisor administrators. In practice this means that even a kubeadmin user cannot exec into a running confidential container or inspect its memory.
 This pattern deploys and configures Red Hat OpenShift Sandboxed Containers for confidential computing workloads on both cloud (Microsoft Azure) and bare metal infrastructure.
-Cloud deployments use &#34;peer pods&#34; — confidential VMs provisioned directly on the Azure hypervisor rather than nested inside OpenShift worker nodes. Azure offers multiple confidential VM families; this pattern defaults to the Standard_DCas_v5 family but can be configured to use other families via values-global.yaml.
+Cloud deployments use &#34;peer pods&#34;, which are confidential VMs provisioned directly on the Azure hypervisor rather than nested inside OpenShift worker nodes. Azure offers multiple confidential VM families; this pattern defaults to the Standard_DCas_v5 family but can be configured to use other families by modifying values-global.yaml.
 Bare metal deployments support Intel TDX (Trusted Domain Extensions) and AMD SEV-SNP (Secure Encrypted Virtualization - Secure Nested Paging) hardware TEEs, with optional Technology Preview NVIDIA confidential GPU support (H100, H200, B100, B200) for protected GPU workloads.
 The pattern includes sample applications demonstrating security boundaries and secret delivery: three variants of &#39;Hello OpenShift&#39; and a kbs-access web service for verifying end-to-end attestation and secret retrieval from the Key Broker Service.
 Deployment topologies The pattern supports four deployment topologies, selected by setting main.clusterGroupName in values-global.yaml:
-simple — Single-cluster Azure deployment with all components (Trustee, Vault, ACM, sandboxed containers, workloads) on one cluster
-trusted-hub + spoke — Multi-cluster Azure deployment separating the trusted zone (hub with Trustee/Vault/ACM) from the untrusted workload zone (spoke)
-baremetal — Single-cluster bare metal with Intel TDX or AMD SEV-SNP support
-baremetal-gpu — Technology Preview: Bare metal with Intel TDX or AMD SEV-SNP and NVIDIA confidential GPU support (H100, H200, B100, B200)
+simple: Single-cluster Azure deployment with all components (Trustee, Vault, ACM, sandboxed containers, workloads) on one cluster
+trusted-hub + spoke: Multi-cluster Azure deployment separating the trusted zone (hub with Trustee/Vault/ACM) from the untrusted workload zone (spoke)
+baremetal: Single-cluster bare metal with Intel TDX or AMD SEV-SNP support
+baremetal-gpu: Technology Preview: Bare metal with Intel TDX or AMD SEV-SNP and NVIDIA confidential GPU support (H100, H200, B100, B200)
 Requirements Azure deployments An Azure account with the required access rights, including quota for Azure confidential VM families (default: Standard_DCas_v5)
 An OpenShift 4.19.28+ cluster within the Azure environment
 Azure DNS hosting the cluster’s DNS zone
@@ -6609,63 +6772,64 @@ For GPU topology (Technology Preview): NVIDIA GPUs with confidential computing f
 Tools: podman, yq, jq, skopeo
 An OpenShift pull secret at ~/pull-secret.json
 Security considerations This pattern is a demonstration only and contains configurations that are not best practice
-The pattern supports both single-cluster (simple clusterGroup) and multi-cluster (trusted-hub + spoke) topologies. The default is single-cluster, which breaks the RACI separation expected in a remote attestation architecture. In the single-cluster topology, the Key Broker Service and the workloads it protects run on the same cluster, meaning a compromised cluster could affect both. The multi-cluster topology addresses this by separating the trusted zone (Trustee, Vault, ACM on the hub) from the untrusted workload zone (spoke). The RATS architecture mandates that the Key Broker Service (e.g. Trustee) is in a trusted security zone.
+The pattern supports both single-cluster (simple clusterGroup) and multi-cluster (trusted-hub + spoke) topologies. The default is single-cluster, which breaks the RACI separation expected in a remote attestation architecture. In the single-cluster topology, the Key Broker Service and the workloads it protects run on the same cluster, meaning a compromised cluster could affect both. The multi-cluster topology addresses this by separating the trusted zone (Trustee, Vault, ACM on the hub) from the untrusted workload zone (spoke). The RATS architecture mandates that the Key Broker Service (for example, Trustee) is in a trusted security zone.
 The Attestation Service ships with permissive default policies that accept all container images without verification. This allows quick testing but is unsuitable for production. The threat model assumes that without image signature verification, an attacker with access to the container registry could substitute malicious images that would still receive secrets from the KBS.
 Hardening attestation policies for production For production deployments, configure strict attestation policies:
 Enable the signed policy: Edit ~/values-secret-coco-pattern.yaml and change the attestation policy from insecure to signed:
 kbs: attestation: policy: signed # Changed from &#39;insecure&#39; Generate and register cosign public keys: Container images must be signed with cosign. Generate a key pair and add the public key to the attestation service configuration:
-# Generate cosign key pair cosign generate-key-pair # Add the public key content to values-secret-coco-pattern.yaml kbs: cosignPublicKeys: - | -----BEGIN PUBLIC KEY----- &lt;your cosign public key content&gt; -----END PUBLIC KEY----- Sign your container images: Before deployment, sign all confidential container images:
+cosign generate-key-pair Then add the public key content to values-secret-coco-pattern.yaml:
+kbs: cosignPublicKeys: - | -----BEGIN PUBLIC KEY----- &lt;your cosign public key content&gt; -----END PUBLIC KEY----- Sign your container images: Before deployment, sign all confidential container images:
 # Sign the image cosign sign --key cosign.key your-registry.io/your-image:tag # Verify the signature cosign verify --key cosign.pub your-registry.io/your-image:tag Configure reference values for PCR measurements: For hardware-backed attestation, configure expected PCR values in the policy. These are automatically retrieved by scripts/get-pcr.sh but should be reviewed and locked down in production. See Updating PCR measurements for the workflow when peer-pod images change.
-Without these hardening steps, the attestation service will approve any workload requesting secrets, defeating the confidentiality guarantees of the TEE.
+Without these hardening steps, the attestation service approves any workload requesting secrets, defeating the confidentiality guarantees of the TEE.
 Future work Deploying to IBM Cloud and IBM Z confidential computing environments
 Supporting air-gapped deployments
 Enhanced AI/ML workload examples demonstrating confidential inference at scale
 Architecture Confidential Containers architecture separates two security zones:
 Trusted zone: Runs the Key Broker Service (Trustee), attestation service, and secrets management (Vault). This zone verifies TEE evidence and releases secrets only to authenticated confidential workloads.
 Untrusted zone: Runs the sandboxed containers operator, confidential workload pods, and the Kyverno policy engine. Workloads in this zone must attest to Trustee before receiving secrets.
-The pattern supports both single-cluster and multi-cluster topologies. In single-cluster topologies (simple, baremetal, baremetal-gpu), all components run on one cluster. In the multi-cluster topology, the trusted-hub clusterGroup runs on the hub cluster and the spoke clusterGroup runs on managed clusters imported via ACM.
-Kyverno’s role: The pattern uses Kyverno to dynamically inject attestation agent configuration (cc_init_data) into confidential pods at admission time. An imperative job generates ConfigMaps containing the KBS TLS certificate and policy files. Kyverno propagates these ConfigMaps to workload namespaces and injects them as pod annotations, ensuring pods have the correct configuration for attestation without manual annotation management.
+The pattern supports both single-cluster and multi-cluster topologies. In single-cluster topologies (simple, baremetal, baremetal-gpu), all components run on one cluster. In the multi-cluster topology, the trusted-hub clusterGroup runs on the hub cluster and the spoke clusterGroup runs on managed clusters imported through ACM.
+The role of Kyverno: The pattern uses Kyverno to dynamically inject attestation agent configuration (cc_init_data) into confidential pods at admission time. An imperative job generates ConfigMaps containing the KBS TLS certificate and policy files. Kyverno propagates these ConfigMaps to workload namespaces and injects them as pod annotations, ensuring pods have the correct configuration for attestation without manual annotation management.
 Key components Red Hat Build of Trustee 1.1: The Key Broker Service (KBS) and attestation service. Trustee verifies that workloads are running in a genuine TEE before releasing secrets. Certificates for Trustee are managed by cert-manager using self-signed CAs.
 HashiCorp Vault: Secrets backend for the Validated Patterns framework. Stores KBS keys, attestation policies, and PCR measurements.
 OpenShift Sandboxed Containers 1.12: Deploys and manages confidential container infrastructure. On Azure, provisions peer-pod VMs; on bare metal, configures Kata runtimes for TDX/SEV-SNP. Operator subscriptions are pinned to specific CSV versions with manual install plan approval to ensure version consistency.
 Kyverno: Policy engine that dynamically injects cc_init_data annotations into confidential pods. Manages the distribution of attestation agent configuration (KBS TLS certificates, policy files) from centralized ConfigMaps to workload namespaces.
-Red Hat Advanced Cluster Management (ACM): Manages the spoke cluster in multi-cluster deployments. Policies and applications are deployed to the spoke via ACM’s application lifecycle management.
+Red Hat Advanced Cluster Management (RHACM): Manages the spoke cluster in multi-cluster deployments. Policies and applications are deployed to the spoke through ACM application lifecycle management.
 Node Feature Discovery (NFD) (bare metal only): Detects Intel TDX and AMD SEV-SNP hardware capabilities and labels nodes accordingly for runtime class scheduling.
-Intel DCAP (bare metal with Intel TDX): Provisioning Certificate Caching Service (PCCS) and Quote Generation Service (QGS) for Intel TDX remote attestation via the Intel PCS API.
+Intel DCAP (bare metal with Intel TDX): Provisioning Certificate Caching Service (PCCS) and Quote Generation Service (QGS) for Intel TDX remote attestation through the Intel PCS API.
 NVIDIA GPU Operator (GPU topology only, Technology Preview): Manages NVIDIA confidential GPUs (H100, H200, B100, B200) with CC Manager, VFIO passthrough, and Kata device plugins for GPU-enabled confidential workloads.
 Intel TDX support Intel Trusted Domain Extensions (TDX) is a hardware-based TEE technology that isolates virtual machines from the hypervisor and other VMs using CPU-enforced memory encryption and integrity protection. The pattern provides full Intel TDX support on bare metal deployments.
 Key features:
 Automatic hardware detection: Node Feature Discovery (NFD) detects TDX-capable CPUs and labels nodes with intel.feature.node.kubernetes.io/tdx=true
-Remote attestation: Intel DCAP components (PCCS and QGS) enable quote generation and verification via the Intel PCS API
+Remote attestation: Intel DCAP components (PCCS and QGS) enable quote generation and verification through the Intel PCS API
 Transparent runtime selection: The kata-cc RuntimeClass automatically uses the TDX handler (kata-tdx) on labeled nodes
 MachineConfig automation: Kernel parameters (kvm_intel.tdx=1) and vsock modules are applied automatically
 Deployment requirements:
 Intel Xeon processors with TDX support (4th Gen Sapphire Rapids or newer)
 BIOS/firmware with TDX enabled
 Intel PCS API key (obtainable from Intel Trusted Services)
-The pattern’s Intel DCAP chart deploys PCCS as a centralized caching service and QGS as a DaemonSet on TDX nodes. Quote generation happens within the TEE, with PCCS providing attestation collateral to Trustee for verification.
-AMD SEV-SNP support AMD Secure Encrypted Virtualization - Secure Nested Paging (SEV-SNP) is a hardware-based TEE technology that provides VM isolation through memory encryption and integrity protection. SEV-SNP extends AMD’s SEV technology with secure nested paging to protect against additional attack vectors. The pattern provides full AMD SEV-SNP support on bare metal deployments.
+The pattern Intel DCAP chart deploys PCCS as a centralized caching service and QGS as a DaemonSet on TDX nodes. Quote generation happens within the TEE, with PCCS providing attestation collateral to Trustee for verification.
+AMD SEV-SNP support AMD Secure Encrypted Virtualization - Secure Nested Paging (SEV-SNP) is a hardware-based TEE technology that provides VM isolation through memory encryption and integrity protection. SEV-SNP extends AMD SEV technology with secure nested paging to protect against additional attack vectors. The pattern provides full AMD SEV-SNP support on bare metal deployments.
 Key features:
 Automatic hardware detection: Node Feature Discovery (NFD) detects SEV-SNP-capable processors and labels nodes with amd.feature.node.kubernetes.io/snp=true
-Certificate chain-based attestation: AMD SEV-SNP uses a certificate chain model for attestation verification, eliminating the need for a collateral caching service like Intel’s PCCS
+Certificate chain-based attestation: AMD SEV-SNP uses a certificate chain model for attestation verification, eliminating the need for a collateral caching service like Intel PCCS
 Transparent runtime selection: The kata-cc RuntimeClass automatically uses the SEV-SNP handler (kata-snp) on labeled nodes
 MachineConfig automation: Kernel parameters for SEV-SNP enablement and vsock modules are applied automatically
 Deployment requirements:
 AMD EPYC processors with SEV-SNP support (3rd Gen Milan or newer)
 BIOS/firmware with SEV-SNP enabled
 No external attestation service required (certificate chain-based model)
-AMD SEV-SNP’s certificate chain approach simplifies the attestation infrastructure compared to Intel TDX, as the full certificate chain is embedded in the attestation evidence sent to Trustee for verification.
-NVIDIA confidential GPU support (Technology Preview) NVIDIA confidential GPUs with confidential computing firmware enable GPU-accelerated workloads to run inside TEEs with hardware-enforced memory encryption and attestation. The pattern’s baremetal-gpu topology provides support for NVIDIA confidential GPUs (H100, H200, B100, B200) on bare metal with either Intel TDX or AMD SEV-SNP as the host TEE platform.
+The AMD SEV-SNP certificate chain approach simplifies the attestation infrastructure compared to Intel TDX, as the full certificate chain is embedded in the attestation evidence sent to Trustee for verification.
+NVIDIA confidential GPU support (Technology Preview) NVIDIA confidential GPUs with confidential computing firmware enable GPU-accelerated workloads to run inside TEEs with hardware-enforced memory encryption and attestation. The pattern baremetal-gpu topology provides support for NVIDIA confidential GPUs (H100, H200, B100, B200) on bare metal with either Intel TDX or AMD SEV-SNP as the host TEE platform.
 Key features:
-GPU passthrough via VFIO: GPUs are passed through to Kata confidential VMs using IOMMU and VFIO, providing native GPU performance
+GPU passthrough through VFIO: GPUs are passed through to Kata confidential VMs by using IOMMU and VFIO, providing native GPU performance
 Confidential Computing Manager: NVIDIA CC Manager enforces confidential mode at the GPU firmware level
-GPU attestation: The GPU’s attestation evidence is included in the TEE’s attestation report to Trustee
+GPU attestation: The GPU attestation evidence is included in the TEE attestation report to Trustee
 Kata device plugin: The NVIDIA Kata sandbox device plugin exposes GPUs as schedulable resources (nvidia.com/pgpu)
 Multi-platform support: Works with both Intel TDX and AMD SEV-SNP host TEE platforms
 Deployment requirements:
 NVIDIA GPUs with confidential computing firmware (H100, H200, B100, B200)
 Intel TDX or AMD SEV-SNP enabled bare metal host
-IOMMU-capable system (kernel parameters applied via MachineConfig: intel_iommu=on or amd_iommu=on)
+IOMMU-capable system (kernel parameters applied by using MachineConfig: intel_iommu=on or amd_iommu=on)
 NVIDIA GPU Operator v26.3.0+
 The pattern includes a sample CUDA workload (gpu-vectoradd) that demonstrates GPU-accelerated computation within a confidential container, verifying both GPU functionality and attestation integration. Testing has been performed with Intel TDX + H100; AMD SEV-SNP + GPU configurations are expected to work but have not been fully validated.
 References OpenShift Sandboxed Containers and Trustee:
@@ -6690,8 +6854,8 @@ NVIDIA Confidential Computing:
 NVIDIA Confidential Computing documentation
 NVIDIA GPU Operator documentation
 Related patterns:
-Intel SGX protected Vault for Multicloud GitOps — Uses Intel SGX enclaves (Gramine) for application-level confidential computing, complementary to CoCo’s VM-based TEE approach
-Layered Zero Trust — Demonstrates workload identity (SPIFFE/SPIRE), secrets management (Vault/ESO), and zero-trust principles that complement CoCo’s TEE isolation
+Intel SGX protected Vault for Multicloud GitOps: Uses Intel SGX enclaves (Gramine) for application-level confidential computing, complementary to the CoCo VM-based TEE approach
+Layered Zero Trust: Demonstrates workload identity (SPIFFE/SPIRE), secrets management (Vault/ESO), and zero-trust principles that complement CoCo TEE isolation
 `,url:"https://validatedpatterns.io/patterns/coco-pattern/",breadcrumb:"/patterns/coco-pattern/"},"https://validatedpatterns.io/blog/2024-09-26-slimming-of-common/":{title:"The Slimming of Common",tags:[],content:` Preamble Historically Validated Patterns, shipped all the helm charts and all the ansible code needed to deploy a pattern within the git repository of the pattern itself. The common subfolder in any pattern is a git subtree containing all of the common repository at a certain point in time. Some thoughts around the choice of git subtrees can be found here
 While having common in a git subtree in every pattern repositories has served us fairly well, it came with a number of trade-offs and less than ideal aspects:
 Most people are not really familiar with git subtrees and updating common was fairly cumbersome The pieces inside common (helm charts, ansible &amp; scripts) could not be updated independently Folks would just change the local common folder and not submit changes to the upstream repository, ultimately causing merge conflicts when updating common or when they eventually merged downstream
